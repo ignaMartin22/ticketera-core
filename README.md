@@ -4,6 +4,8 @@ Backend de TicketJuy para operar varios boliches desde una misma plataforma. Moo
 
 ## Flujos de Fuego Austral que sirven de referencia
 
+Los archivos seleccionados están disponibles en [la referencia local](reference/fuego-austral/README.md).
+
 | Flujo | Referencia | Adaptación para TicketJuy |
 | --- | --- | --- |
 | Eventos y cupos | [Eventos](https://github.com/fuegoaustral/ticketera/blob/466a9397584890e1b7eef159432ed4bbe2e0f0e0/events/models.py) y [tipos de entrada](https://github.com/fuegoaustral/ticketera/blob/466a9397584890e1b7eef159432ed4bbe2e0f0e0/tickets/models.py) | Asociar cada evento a un boliche. Controlar cupos por tipo y reservarlos en una transacción. |
