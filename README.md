@@ -4,12 +4,15 @@ Backend de TicketJuy para operar varios boliches desde una misma plataforma. Moo
 
 ## Ejecutar el catálogo localmente
 
-Con Python 3.12 o superior, desde PowerShell:
+Creá una base PostgreSQL y un usuario con acceso a ella. Con Python 3.12 o superior, configurá los datos de conexión desde PowerShell:
 
 ```powershell
 python -m venv .venv
 .venv/Scripts/python.exe -m pip install -r requirements.txt
 $env:DJANGO_DEBUG = "1"
+$env:POSTGRES_DB = "ticketera"
+$env:POSTGRES_USER = "ticketera"
+$env:POSTGRES_PASSWORD = "<contraseña de desarrollo>"
 .venv/Scripts/python.exe manage.py migrate
 .venv/Scripts/python.exe manage.py createsuperuser
 .venv/Scripts/python.exe manage.py runserver
@@ -17,7 +20,7 @@ $env:DJANGO_DEBUG = "1"
 
 Abrí `http://127.0.0.1:8000/admin/` para crear un boliche, un evento y sus tipos de entrada. Activá el boliche y publicá el evento para verlo por API. Para delegar el catálogo, creá un usuario con estado de personal y una membresía de administración en ese boliche. Las membresías de puerta y caja quedan registradas para sus futuras herramientas.
 
-Con `DJANGO_DEBUG=1` y sin `POSTGRES_DB`, Django usa SQLite. Para usar PostgreSQL, definí `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` y, según la instancia, `POSTGRES_HOST`, `POSTGRES_PORT` y `POSTGRES_SSLMODE`. Fuera de desarrollo, configurá también `DJANGO_SECRET_KEY` y `DJANGO_ALLOWED_HOSTS`.
+La conexión usa `localhost:5432` por defecto. Configurá `POSTGRES_HOST`, `POSTGRES_PORT` y `POSTGRES_SSLMODE` según la instancia. Fuera de desarrollo, configurá también `DJANGO_SECRET_KEY` y `DJANGO_ALLOWED_HOSTS`.
 
 ## API pública
 
@@ -29,7 +32,7 @@ Con `DJANGO_DEBUG=1` y sin `POSTGRES_DB`, Django usa SQLite. Para usar PostgreSQ
 
 Los identificadores públicos son slugs. El slug de un evento se resuelve dentro de su boliche. Los precios se guardan como decimales y se exponen en pesos para las pantallas de catálogo. Los endpoints son de lectura. El campo `sold` se actualizará cuando se implemente el flujo de órdenes.
 
-Ejecutá las pruebas con `.venv/Scripts/python.exe manage.py test catalog`.
+Ejecutá las pruebas con `.venv/Scripts/python.exe manage.py test catalog`. Usá un usuario PostgreSQL de desarrollo con permiso `CREATEDB` para que Django pueda crear y eliminar su base de pruebas.
 
 ## Flujos de Fuego Austral que sirven de referencia
 
