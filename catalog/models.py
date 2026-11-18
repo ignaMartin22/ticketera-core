@@ -1,7 +1,9 @@
+from uuid import uuid4
+
 from django.conf import settings
 from django.core.validators import MaxValueValidator, RegexValidator
 from django.db import models
-from django.db.models import F, Q
+from django.db.models import F, Q, Sum
 
 
 class Venue(models.Model):
@@ -79,6 +81,17 @@ class Event(models.Model):
         return f"{self.venue} / {self.title}"
 
 
+class TicketTypeQuerySet(models.QuerySet):
+    def with_reserved(self, at):
+        return self.annotate(
+            reserved=Sum(
+                "order_items__quantity",
+                filter=Q(order_items__order__expires_at__gt=at),
+                default=0,
+            ),
+        )
+
+
 class TicketType(models.Model):
     event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name="ticket_types")
     slug = models.SlugField()
@@ -88,6 +101,7 @@ class TicketType(models.Model):
     capacity = models.PositiveIntegerField()
     sold = models.PositiveIntegerField(default=0, editable=False)
     is_active = models.BooleanField(default=True)
+    objects = TicketTypeQuerySet.as_manager()
 
     class Meta:
         ordering = ["pk"]
@@ -99,3 +113,35 @@ class TicketType(models.Model):
 
     def __str__(self):
         return f"{self.event} / {self.name}"
+
+
+class Order(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
+    event = models.ForeignKey(Event, on_delete=models.PROTECT, related_name="orders")
+    buyer_email = models.EmailField()
+    idempotency_key = models.UUIDField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["event", "idempotency_key"], name="unique_order_request_per_event",
+            ),
+        ]
+
+
+class OrderItem(models.Model):
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="items")
+    ticket_type = models.ForeignKey(TicketType, on_delete=models.PROTECT, related_name="order_items")
+    ticket_slug = models.SlugField()
+    quantity = models.PositiveSmallIntegerField()
+    unit_price = models.DecimalField(max_digits=12, decimal_places=2)
+    unit_service_fee = models.DecimalField(max_digits=13, decimal_places=2)
+
+    class Meta:
+        ordering = ["ticket_type_id"]
+        constraints = [
+            models.UniqueConstraint(fields=["order", "ticket_type"], name="unique_order_ticket_type"),
+            models.CheckConstraint(condition=Q(quantity__gt=0), name="order_item_quantity_positive"),
+        ]

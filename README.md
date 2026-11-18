@@ -27,7 +27,24 @@ Con `DJANGO_DEBUG=1` y sin `POSTGRES_DB`, Django usa SQLite. Para usar PostgreSQ
 | `/api/v1/venues/<boliche>/events/` | `{ venue, events }` con los eventos publicados y sus tipos de entrada activos |
 | `/api/v1/venues/<boliche>/events/<evento>/` | `{ venue, event }` para una fecha concreta |
 
-Los identificadores públicos son slugs. El slug de un evento se resuelve dentro de su boliche. Los precios se guardan como decimales y se exponen en pesos para las pantallas de catálogo. Los endpoints son de lectura. El campo `sold` se actualizará cuando se implemente el flujo de órdenes.
+Los identificadores públicos son slugs. El slug de un evento se resuelve dentro de su boliche. Los precios se guardan como decimales y se exponen en pesos para las pantallas de catálogo. Cada tipo de entrada expone `available`, que descuenta las entradas vendidas y las reservas vigentes. `sold` conserva la cantidad vendida.
+
+## Pedidos sin cuenta
+
+`POST /api/v1/venues/<boliche>/events/<evento>/orders/` recibe JSON y una cabecera `Idempotency-Key` con un UUID generado para el intento. Se reutiliza la misma clave al reintentar después de un error de red.
+
+```json
+{
+  "email": "comprador@example.com",
+  "items": [{ "ticketTypeId": "general", "quantity": 2 }]
+}
+```
+
+La respuesta `201` incluye `order.id`, `status`, `expiresAt` y los importes en ARS como cadenas decimales. El backend guarda los precios y el cargo de servicio vigentes en el momento de reservar. El máximo es 10 entradas por pedido. Un reintento con el mismo contenido devuelve `200` con el pedido original. Una clave reutilizada con otro contenido o el cupo insuficiente devuelven `409`.
+
+`GET /api/v1/venues/<boliche>/events/<evento>/orders/<uuid>/` devuelve el estado `pending_payment` o `expired`. El pedido reserva cupo durante 10 minutos. Al vencimiento, ese cupo vuelve a estar disponible en las consultas y en nuevas compras sin una tarea periódica. Conservá el UUID como dato privado del comprador. La respuesta omite su email.
+
+La confirmación de pagos, la emisión y el manejo de pagos tardíos forman parte de la siguiente integración. Antes de habilitar la compra pública, agregá protección contra reservas automatizadas en el punto de entrada.
 
 Ejecutá las pruebas con `.venv/Scripts/python.exe manage.py test catalog`.
 
