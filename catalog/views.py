@@ -1,10 +1,8 @@
 import json
-from sqlite3 import SQLITE_BUSY, SQLITE_LOCKED
 from uuid import UUID
 
 from django.core.exceptions import RequestDataTooBig, ValidationError
 from django.core.validators import validate_email, validate_slug
-from django.db import OperationalError
 from django.db.models import Prefetch
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
@@ -161,11 +159,6 @@ def order_create(request, venue_slug, event_slug):
         return JsonResponse({"error": "event_unavailable"}, status=404)
     except OrderConflict as exc:
         return JsonResponse({"error": str(exc)}, status=409)
-    except OperationalError as exc:
-        sqlite_code = getattr(exc.__cause__, "sqlite_errorcode", 0)
-        if (sqlite_code & 0xFF) not in (SQLITE_BUSY, SQLITE_LOCKED):
-            raise
-        return JsonResponse({"error": "try_again"}, status=503, headers={"Retry-After": "1"})
     return JsonResponse({"order": order_data(order, items)}, status=201 if created else 200)
 
 

@@ -111,8 +111,5 @@ class ConcurrentOrderTests(TransactionTestCase):
 
         with ThreadPoolExecutor(max_workers=2) as pool:
             statuses = list(pool.map(request_order, keys))
-        for index, status in enumerate(statuses):
-            if status == 503:
-                statuses[index] = create_order(self.client, keys[index]).status_code
         self.assertCountEqual(statuses, [201, 409])
         self.assertEqual(Order.objects.count(), 1)
