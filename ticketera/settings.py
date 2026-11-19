@@ -14,9 +14,9 @@ SECRET_KEY = (
 )
 ALLOWED_HOSTS = os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 CSRF_TRUSTED_ORIGINS = [
-    origin
+    origin.strip()
     for origin in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",")
-    if origin
+    if origin.strip()
 ]
 ROOT_URLCONF = "ticketera.urls"
 WSGI_APPLICATION = "ticketera.wsgi.application"
