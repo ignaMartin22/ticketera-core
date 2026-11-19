@@ -79,11 +79,11 @@ Si falta alguna de las cuatro primeras, la app arranca igual y las rutas de cone
 | Ruta | Uso |
 | --- | --- |
 | `POST /api/v1/manage/venues/<boliche>/mercadopago/connect/` | Rol `admin`. Devuelve `{ authorizationUrl }`; el `state` firmado vence a los 10 minutos |
-| `GET /api/v1/mercadopago/oauth/callback/` | Lo abre el navegador al volver de Mercado Pago. Siempre redirige a `MP_CONNECT_RETURN_URL` con `mp=connected&venue=<slug>` o `mp=error&reason=<invalid_state|denied|exchange_failed|not_configured>` |
+| `GET /api/v1/mercadopago/oauth/callback/` | Lo abre el navegador al volver de Mercado Pago. Siempre redirige a `MP_CONNECT_RETURN_URL` con `mp=connected&venue=<slug>` o `mp=error&reason=<código>` (`invalid_state`, `denied`, `exchange_failed`, `not_configured`) |
 | `GET /api/v1/manage/venues/<boliche>/mercadopago/` | Rol `admin`. `{ connected, needsReconnect, mpUserId, liveMode, connectedAt, expiresAt }`, sin tokens |
 | `DELETE /api/v1/manage/venues/<boliche>/mercadopago/` | Rol `admin`. Borra la cuenta guardada (`204`) |
 
-`catalog.mp_connect.get_access_token(venue)` devuelve el access token en claro y lo renueva si le quedan menos de 30 días; levanta `MercadoPagoNotConnected` si el boliche debe reconectar. Programá `manage.py refresh_mp_tokens` una vez por día para renovar las cuentas por vencer aunque nadie cobre.
+`catalog.mp_connect.get_access_token(venue)` devuelve el access token en claro mientras no haya vencido y lo renueva si le quedan menos de 30 días. Un fallo de red, 429 o 5xx al renovar no desconecta al boliche; un rechazo de Mercado Pago (400/401) marca `needsReconnect`, que es un aviso para el panel y no corta el cobro mientras el token siga vigente. Levanta `MercadoPagoNotConnected` si no hay cuenta o el token ya venció sin poder renovarse. Programá `manage.py refresh_mp_tokens` una vez por día para renovar las cuentas por vencer aunque nadie cobre.
 
 ## Personal
 

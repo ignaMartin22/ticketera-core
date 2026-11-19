@@ -232,25 +232,73 @@ class AccessTokenTests(MpTestCase):
         self.assertLess(abs((account.expires_at - timezone.now()).total_seconds() - EXPIRES_IN), 60)
         self.assertFalse(account.needs_reconnect)
 
+    def renew_failing(self, status, days_left, **extra):
+        self.make_account(self.venue_a, days_left, **extra)
+        with mock.patch("catalog.mp.refresh_tokens", side_effect=mp.MercadoPagoError(status, {})) as refresh:
+            try:
+                return get_access_token(self.venue_a), refresh
+            except MercadoPagoNotConnected:
+                return None, refresh
+
+    def needs_reconnect(self):
+        return MercadoPagoAccount.objects.get(venue=self.venue_a).needs_reconnect
+
     def test_16_failed_refresh_still_valid(self):  # 16
-        self.make_account(self.venue_a, 10)
-        with mock.patch("catalog.mp.refresh_tokens", side_effect=mp.MercadoPagoError(400, {})):
-            self.assertEqual(get_access_token(self.venue_a), "acc-viejo")
-        self.assertTrue(MercadoPagoAccount.objects.get(venue=self.venue_a).needs_reconnect)
+        token, _ = self.renew_failing(400, 10)
+        self.assertEqual(token, "acc-viejo")
+        self.assertTrue(self.needs_reconnect())
 
     def test_17_failed_refresh_expired(self):  # 17
-        self.make_account(self.venue_a, -1)
-        with mock.patch("catalog.mp.refresh_tokens", side_effect=mp.MercadoPagoError(400, {})):
-            with self.assertRaises(MercadoPagoNotConnected):
-                get_access_token(self.venue_a)
-        self.assertTrue(MercadoPagoAccount.objects.get(venue=self.venue_a).needs_reconnect)
+        token, _ = self.renew_failing(400, -1)
+        self.assertIsNone(token)
+        self.assertTrue(self.needs_reconnect())
 
     def test_18_not_connected(self):  # 18
         with self.assertRaises(MercadoPagoNotConnected):
             get_access_token(self.venue_a)
-        self.make_account(self.venue_b, 100, needs_reconnect=True)
+        self.make_account(self.venue_b, -1, needs_reconnect=True)
         with self.assertRaises(MercadoPagoNotConnected):
             get_access_token(self.venue_b)
+
+    def test_a_network_error_keeps_connection(self):  # a
+        token, _ = self.renew_failing(0, 10)
+        self.assertEqual(token, "acc-viejo")
+        self.assertFalse(self.needs_reconnect())
+
+    def test_b_server_error_keeps_connection(self):  # b
+        for status in (503, 429):
+            MercadoPagoAccount.objects.all().delete()
+            token, _ = self.renew_failing(status, 10)
+            self.assertEqual(token, "acc-viejo")
+            self.assertFalse(self.needs_reconnect())
+
+    def test_c_rejected_refresh_token_marks_reconnect(self):  # c
+        for status in (400, 401):
+            MercadoPagoAccount.objects.all().delete()
+            token, _ = self.renew_failing(status, 10)
+            self.assertEqual(token, "acc-viejo")
+            self.assertTrue(self.needs_reconnect())
+
+    def test_d_needs_reconnect_but_valid_token(self):  # d
+        token, refresh = self.renew_failing(400, 10, needs_reconnect=True)
+        self.assertEqual(token, "acc-viejo")
+        refresh.assert_not_called()
+
+    def test_e_needs_reconnect_and_expired(self):  # e
+        token, refresh = self.renew_failing(400, -1, needs_reconnect=True)
+        self.assertIsNone(token)
+        refresh.assert_not_called()
+
+    def test_f_transient_failure_and_expired(self):  # f
+        token, _ = self.renew_failing(503, -1)
+        self.assertIsNone(token)
+        self.assertFalse(self.needs_reconnect())
+
+    def test_malformed_response_marks_reconnect(self):
+        self.make_account(self.venue_a, 10)
+        with mock.patch("catalog.mp.refresh_tokens", return_value={"access_token": "x"}):
+            self.assertEqual(get_access_token(self.venue_a), "acc-viejo")
+        self.assertTrue(self.needs_reconnect())
 
 
 class RefreshCommandTests(MpTestCase):
@@ -277,6 +325,17 @@ class RefreshCommandTests(MpTestCase):
         self.assertTrue(failing.needs_reconnect)
         self.assertNotIn("a-nuevo", out.getvalue())
         self.assertNotIn("r-nuevo", out.getvalue())
+
+
+class RefreshCommandTransientTests(MpTestCase):
+    def test_g_transient_failure_counts_as_failed(self):  # g
+        account = self.make_account(self.venue_a, 10)
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch("catalog.mp.refresh_tokens", side_effect=mp.MercadoPagoError(503, {})):
+            call_command("refresh_mp_tokens", stdout=out, stderr=err)
+        account.refresh_from_db()
+        self.assertFalse(account.needs_reconnect)
+        self.assertIn("Fallidas: 1", out.getvalue())
 
 
 class CryptoTests(MpTestCase):

@@ -54,11 +54,18 @@ def _apply_tokens(account, data):
         account.live_mode = bool(data["live_mode"])
 
 
+def _transient(error):
+    """Red, 429 o 5xx: no dice nada sobre la validez del refresh token."""
+    return error.status in (0, None, 429) or (isinstance(error.status, int) and error.status >= 500)
+
+
 def renew_account(account_id):
     """Renueva los tokens de una cuenta si les quedan menos de 30 días.
 
     Bloquea la fila: cada renovación rota el refresh_token y dos simultáneas romperían la
-    conexión. Devuelve (cuenta, ok). Si falla, marca `needs_reconnect`.
+    conexión. Devuelve (cuenta, ok). Un rechazo definitivo (400/401, refresh token ilegible
+    o respuesta incompleta) marca `needs_reconnect`; un fallo transitorio (red, 429, 5xx)
+    deja la cuenta igual para reintentar en el próximo uso o corrida.
     """
     with transaction.atomic():
         account = MercadoPagoAccount.objects.select_for_update().get(pk=account_id)
@@ -68,7 +75,13 @@ def renew_account(account_id):
             return account, True  # otra renovación se adelantó
         try:
             _apply_tokens(account, mp.refresh_tokens(crypto.decrypt(account.refresh_token)))
-        except (mp.MercadoPagoError, crypto.TokenCryptoError, KeyError, TypeError, ValueError):
+        except mp.MercadoPagoError as exc:
+            account = MercadoPagoAccount.objects.get(pk=account_id)
+            if not _transient(exc):
+                account.needs_reconnect = True
+                account.save(update_fields=["needs_reconnect", "updated_at"])
+            return account, False
+        except (crypto.TokenCryptoError, KeyError, TypeError, ValueError):
             account = MercadoPagoAccount.objects.get(pk=account_id)
             account.needs_reconnect = True
             account.save(update_fields=["needs_reconnect", "updated_at"])
@@ -80,17 +93,19 @@ def renew_account(account_id):
 def get_access_token(venue):
     """Access token en claro del boliche, renovado si le quedan menos de 30 días.
 
-    Levanta MercadoPagoNotConnected si no hay cuenta, si hay que reconectar, o si la
-    renovación falló y el token ya venció. Si la renovación falla pero el token todavía
-    vale, lo devuelve igual y deja `needs_reconnect=True`.
+    Mientras el token no haya vencido lo devuelve siempre: `needs_reconnect` es un aviso
+    para el panel, no un corte. Si le quedan menos de 30 días y no hay que reconectar,
+    intenta renovar antes (un fallo de renovación no impide devolver el token vigente).
+    Levanta MercadoPagoNotConnected si no hay cuenta o si el token ya venció y no pudo
+    renovarse.
     """
     account = MercadoPagoAccount.objects.filter(venue=venue).first()
-    if account is None or account.needs_reconnect:
+    if account is None:
         raise MercadoPagoNotConnected(venue.slug)
-    if _due(account):
-        account, ok = renew_account(account.pk)
-        if not ok and account.expires_at <= timezone.now():
-            raise MercadoPagoNotConnected(venue.slug)
+    if _due(account) and not account.needs_reconnect:
+        account, _ = renew_account(account.pk)
+    if account.expires_at <= timezone.now():
+        raise MercadoPagoNotConnected(venue.slug)
     try:
         return crypto.decrypt(account.access_token)
     except crypto.TokenCryptoError as exc:
