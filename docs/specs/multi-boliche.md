@@ -27,7 +27,7 @@ Venue ─┬─ Membership ── User
 | Nivel | Quién | Dónde | Qué puede hacer |
 | --- | --- | --- | --- |
 | Plataforma | Superusuarios de Django | `/plataforma/` y `/admin/` del core | Todo: crear y pausar boliches, cambiar comisiones, cargar el equipo, cargar fechas y borrar. |
-| Administración del boliche | `Membership` con rol `admin` | Dashboard del repo de su boliche (pendiente: API de gestión de fechas; la conexión de Mercado Pago ya está en `/api/v1/manage/`) | Fechas y entradas de su boliche; borra solo las que no tienen ventas. Ver [ABM de eventos](eventos-del-boliche.md) y [Conexiones](conexiones.md). |
+| Administración del boliche | `Membership` con rol `admin` | Dashboard del repo de su boliche, vía la API de gestión de fechas y la conexión de Mercado Pago (`/api/v1/manage/`, con token por usuario) | Fechas y entradas de su boliche; borra solo las que no tienen ventas. Ver [ABM de eventos](eventos-del-boliche.md) y [Conexiones](conexiones.md). |
 | Puerta | `Membership` con rol `door` | API de portería (`/api/v1/door/`) con el login del personal (`/api/v1/auth/`) | Escanear entradas (cada QR firmado se acepta una sola vez) y ver la asistencia por evento. Funciona solo con conexión. |
 | Caja | `Membership` con rol `cashier` | Pendiente | Reservado para la venta en caja. |
 
@@ -50,4 +50,4 @@ Venue ─┬─ Membership ── User
 
 - Modo sin señal del escáner de puerta, que necesita una regla de operación para cuando dos celulares sin conexión aceptan el mismo QR.
 - Herramientas para el rol de caja.
-- Credenciales de API por repo de cliente, limitadas a su boliche. Ver [Clientes](clientes.md).
+- Credenciales de API por repo de cliente, limitadas a su boliche (la API de gestión ya usa tokens por usuario). Ver [Clientes](clientes.md).

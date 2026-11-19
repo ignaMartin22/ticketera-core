@@ -130,6 +130,19 @@ class Membership(models.Model):
         ]
 
 
+class ApiToken(models.Model):
+    """Clave de la API de gestión, de un usuario. En la base queda solo su hash."""
+
+    key_hash = models.CharField(max_length=64, unique=True, db_index=True)
+    hint = models.CharField(max_length=8, help_text="Últimos caracteres de la clave, para reconocerla.")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="api_tokens")
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"{self.user} / …{self.hint}"
+
+
 class Event(models.Model):
     venue = models.ForeignKey(Venue, on_delete=models.PROTECT, related_name="events")
     slug = models.SlugField()
