@@ -1,0 +1,12 @@
+.git
+.claude
+.venv
+.local-deps
+__pycache__
+*.py[cod]
+db.sqlite3
+staticfiles
+.env
+**/.env
+deploy
+docs

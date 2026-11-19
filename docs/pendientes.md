@@ -30,10 +30,7 @@ Qué falta para vender una fecha real de Infinity con TicketJuy. Estado al 19/11
 
 ## Puesta en producción
 
-8. Hosting del backend con PostgreSQL administrado y backups.
-   - Agregar `gunicorn` y servir los estáticos (por ejemplo con `whitenoise`).
-   - Configurar `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS` y `SECURE_PROXY_SSL_HEADER` detrás del proxy HTTPS.
-   - Correr `manage.py migrate` en cada deploy.
+8. Hosting del backend. **Resuelto para pruebas**: imagen Docker con gunicorn y whitenoise, PostgreSQL en contenedor con backup diario (`deploy/backup.sh`) y proxy HTTPS de Caddy en una VPS (ver `docs/despliegue-vps.md`). Queda pendiente para producción real: PostgreSQL administrado, un dominio propio y sacar `MP_TEST_TOKENS`.
 9. Frontend en Vercel con `TICKETERA_API_URL` apuntando al backend, y el dominio.
 10. Monitoreo de errores (por ejemplo Sentry) y logs.
 
