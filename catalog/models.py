@@ -119,6 +119,8 @@ class Order(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
     event = models.ForeignKey(Event, on_delete=models.PROTECT, related_name="orders")
     buyer_email = models.EmailField()
+    buyer_name = models.CharField(max_length=150, blank=True)
+    buyer_phone = models.CharField(max_length=16, blank=True, help_text="Formato E.164, por ejemplo +5493884123456.")
     idempotency_key = models.UUIDField()
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField()
