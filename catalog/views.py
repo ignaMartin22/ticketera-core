@@ -92,9 +92,13 @@ def event_detail(request, venue_slug, event_slug):
 
 
 def order_data(order, items):
+    if order.paid_at is not None:
+        status = "paid"
+    else:
+        status = "pending_payment" if order.expires_at > timezone.now() else "expired"
     return {
         "id": str(order.pk),
-        "status": "pending_payment" if order.expires_at > timezone.now() else "expired",
+        "status": status,
         "expiresAt": order.expires_at.isoformat(),
         "currency": "ARS",
         "total": format(sum(item.quantity * (item.unit_price + item.unit_service_fee) for item in items), ".2f"),

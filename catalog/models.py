@@ -86,7 +86,7 @@ class TicketTypeQuerySet(models.QuerySet):
         return self.annotate(
             reserved=Sum(
                 "order_items__quantity",
-                filter=Q(order_items__order__expires_at__gt=at),
+                filter=Q(order_items__order__expires_at__gt=at, order_items__order__paid_at__isnull=True),
                 default=0,
             ),
         )
@@ -124,6 +124,7 @@ class Order(models.Model):
     idempotency_key = models.UUIDField()
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField()
+    paid_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         constraints = [
@@ -147,3 +148,18 @@ class OrderItem(models.Model):
             models.UniqueConstraint(fields=["order", "ticket_type"], name="unique_order_ticket_type"),
             models.CheckConstraint(condition=Q(quantity__gt=0), name="order_item_quantity_positive"),
         ]
+
+
+class Ticket(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
+    order = models.ForeignKey(Order, on_delete=models.PROTECT, related_name="tickets")
+    event = models.ForeignKey(Event, on_delete=models.PROTECT, related_name="tickets")
+    ticket_type = models.ForeignKey(TicketType, on_delete=models.PROTECT, related_name="tickets")
+    created_at = models.DateTimeField(auto_now_add=True)
+    used_at = models.DateTimeField(null=True, blank=True)
+    used_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="+",
+    )
+
+    class Meta:
+        ordering = ["created_at", "pk"]
