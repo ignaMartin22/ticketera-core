@@ -1,6 +1,7 @@
 """API de portería: login del personal de puerta y escaneo de entradas."""
 
 import json
+from datetime import timedelta
 from functools import wraps
 
 from django.contrib.auth import authenticate, get_user_model
@@ -13,12 +14,15 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST, require_safe
 
-from .models import Event, Membership, Ticket, Venue
+from .models import DoorLoginFailure, Event, Membership, Ticket, Venue
 from .qr import InvalidTicketToken, verify_ticket
 
 TOKEN_SALT = "catalog.door-token"
 TOKEN_MAX_AGE = 12 * 60 * 60
 MAX_BODY_BYTES = 8192
+LOGIN_MAX_FAILURES = 10
+LOGIN_FAILURE_WINDOW = timedelta(minutes=15)
+LOGIN_FAILURE_RETENTION = timedelta(hours=24)
 DOOR_ROLES = (Membership.Role.DOOR, Membership.Role.ADMIN)
 
 
@@ -80,6 +84,24 @@ def event_summary(event):
     return {"slug": event.slug, "title": event.title, "startsAt": event.starts_at.isoformat()}
 
 
+def login_retry_after(key):
+    """Segundos de espera si el usuario agotó sus intentos; 0 si puede intentar."""
+    now = timezone.now()
+    recent = list(
+        DoorLoginFailure.objects.filter(username=key, created_at__gt=now - LOGIN_FAILURE_WINDOW)
+        .order_by("-created_at").values_list("created_at", flat=True)[:LOGIN_MAX_FAILURES]
+    )
+    if len(recent) < LOGIN_MAX_FAILURES:
+        return 0
+    wait = recent[-1] + LOGIN_FAILURE_WINDOW - now
+    return max(1, int(wait.total_seconds()) + 1)
+
+
+def record_login_failure(key):
+    DoorLoginFailure.objects.create(username=key)
+    DoorLoginFailure.objects.filter(created_at__lt=timezone.now() - LOGIN_FAILURE_RETENTION).delete()
+
+
 @csrf_exempt
 @require_POST
 @never_cache
@@ -89,10 +111,20 @@ def login(request):
         return failure
     username, password = data.get("username"), data.get("password")
     user = None
+    key = None
     if isinstance(username, str) and isinstance(password, str):
+        key = username.strip().lower()[:150]
+        retry_after = login_retry_after(key)
+        if retry_after:
+            response = JsonResponse({"error": "too_many_attempts", "retryAfter": retry_after}, status=429)
+            response["Retry-After"] = str(retry_after)
+            return response
         user = authenticate(request, username=username, password=password)
     if user is None or not user.is_active:
+        if key is not None:
+            record_login_failure(key)
         return error("invalid_credentials", 401)
+    DoorLoginFailure.objects.filter(username=key).delete()
     venues = Venue.objects.filter(
         is_active=True, memberships__user=user, memberships__role__in=DOOR_ROLES,
     ).distinct().order_by("slug")

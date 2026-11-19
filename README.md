@@ -72,6 +72,8 @@ El personal de puerta entra con su usuario de Django. Necesita una membresía co
 | `POST /api/v1/door/venues/<boliche>/events/<evento>/scan/` | Recibe `{ token }` con el texto del QR y quema la entrada. |
 | `GET /api/v1/door/venues/<boliche>/events/<evento>/attendance/` | Entradas emitidas e ingresadas, por tipo y una por una. |
 
+El login limita los intentos por usuario: con 10 fallos en 15 minutos responde `429` (`too_many_attempts`, con `retryAfter` y la cabecera `Retry-After`) sin evaluar la contraseña; un login correcto borra los fallos.
+
 Todas las rutas salvo el login llevan la cabecera `Authorization: Bearer <token>`. Sin token válido responden `401`; con un usuario sin rol en ese boliche, `404`.
 
 El escaneo responde según el campo `result`:
