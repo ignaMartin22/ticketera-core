@@ -15,7 +15,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         pending = (
             Order.objects.filter(paid_at__isnull=True, created_at__gte=timezone.now() - WINDOW)
-            .exclude(mp_preference_id="")
+            .exclude(mp_order_id="")
             .select_related("event__venue")
         )
         reviewed = confirmed = failed = 0

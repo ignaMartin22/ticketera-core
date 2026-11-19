@@ -1,7 +1,5 @@
 """Única puerta de salida hacia Mercado Pago (SDK oficial). Sin lógica de negocio."""
 
-import warnings
-
 import requests
 from django.conf import settings
 from mercadopago import SDK
@@ -67,25 +65,22 @@ def refresh_tokens(refresh_token):
     return _call(_oauth().refresh, body)
 
 
-def _payments(access_token):
-    options = RequestOptions(connection_timeout=TIMEOUT_SECONDS, max_retries=0)
-    return SDK(access_token, request_options=options).payment()
+def _orders(access_token, idempotency_key=None):
+    headers = {"x-idempotency-key": idempotency_key} if idempotency_key else None
+    options = RequestOptions(connection_timeout=TIMEOUT_SECONDS, max_retries=0, custom_headers=headers)
+    return SDK(access_token, request_options=options).order()
 
 
-def get_payment(access_token, payment_id):
-    """Consulta un pago con el access token del boliche que lo cobró."""
-    payment = _payments(access_token)
-    return _call(lambda _: payment.get(payment_id), None)
+def create_order(access_token, body, idempotency_key):
+    """Crea una order de Checkout Pro con el access token del boliche."""
+    order = _orders(access_token, idempotency_key)
+    return _call(order.create, body)
 
 
-def search_payments(access_token, external_reference):
-    """Pagos con ese external_reference, consultados con el access token del boliche."""
-    payment = _payments(access_token)
-    response = _call(lambda _: payment.search({"external_reference": external_reference}), None)
-    results = response.get("results")
-    if not isinstance(results, list):
-        raise MercadoPagoError(200, response)
-    return [result for result in results if isinstance(result, dict)]
+def get_order(access_token, order_id):
+    """Consulta una order con el access token del boliche que la cobró."""
+    order = _orders(access_token)
+    return _call(lambda _: order.get(order_id), None)
 
 
 def webhook_signature_is_valid(x_signature, x_request_id, data_id):
@@ -98,13 +93,3 @@ def webhook_signature_is_valid(x_signature, x_request_id, data_id):
     except (InvalidWebhookSignatureError, ValueError, TypeError, AttributeError):
         return False
     return True
-
-
-def create_preference(access_token, body):
-    """Crea una preferencia de Checkout Pro con el access token del boliche."""
-    options = RequestOptions(connection_timeout=TIMEOUT_SECONDS, max_retries=0)
-    preference = SDK(access_token, request_options=options).preference()
-    with warnings.catch_warnings():
-        # El SDK avisa que notification_url está en desuso; lo usamos igual a propósito.
-        warnings.simplefilter("ignore", DeprecationWarning)
-        return _call(preference.create, body)

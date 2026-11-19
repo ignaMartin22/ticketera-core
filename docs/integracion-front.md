@@ -258,7 +258,7 @@ La confirmación llega al backend por un aviso de Mercado Pago que puede tardar 
 - **Tipos**: agregar `paymentReview: boolean` a `Order`.
 - **Variables de entorno**: ninguna nueva. Sigue alcanzando con `TICKETERA_API_URL`.
 
-Internamente el backend puede pasar de la API de Preferences a la de Orders de Mercado Pago. Para el front no cambia nada: el campo sigue siendo `initPoint`.
+Internamente el backend usa la API de Orders de Mercado Pago (el `initPoint` es el `checkout_url` de la order). Para el front no cambia nada: el campo sigue siendo `initPoint`.
 
 ## Pendiente del lado del front
 

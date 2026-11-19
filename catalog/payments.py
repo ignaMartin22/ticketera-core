@@ -1,6 +1,8 @@
-"""Link de pago (preferencia de Checkout Pro) de un pedido, creado con el token del boliche."""
+"""Link de pago (order de Checkout Pro) de un pedido, creado con el token del boliche."""
 
+import math
 from decimal import Decimal, ROUND_HALF_UP
+from uuid import NAMESPACE_URL, uuid5
 
 from django.conf import settings
 from django.db import transaction
@@ -13,7 +15,7 @@ from django.views.decorators.http import require_POST
 from . import mp, mp_connect
 from .models import Order
 
-WEBHOOK_PATH = "/api/v1/mercadopago/webhook/"
+CENT = Decimal("0.01")
 EXCLUDED_PAYMENT_TYPES = ("ticket", "atm")
 
 
@@ -21,9 +23,14 @@ def _error(code, status):
     return JsonResponse({"error": code}, status=status)
 
 
-def _number(value):
-    value = Decimal(value)
-    return int(value) if value == value.to_integral_value() else float(value)
+def _money(value):
+    """Monto como texto con 2 decimales, el formato que usa la API de Orders."""
+    return str(Decimal(value).quantize(CENT))
+
+
+def idempotency_key(order):
+    """Misma clave en cada intento sobre el mismo pedido: un reintento no crea dos orders."""
+    return str(uuid5(NAMESPACE_URL, f"ticketera:mp-order:{order.pk}"))
 
 
 def platform_fee(venue, items):
@@ -37,31 +44,43 @@ def platform_fee(venue, items):
     )
 
 
-def preference_body(order, items, fee):
+def expiration_time(order, now=None):
+    """Lo que le queda a la reserva como duración ISO 8601 en minutos (hacia arriba, mínimo 1)."""
+    remaining = (order.expires_at - (now or timezone.now())).total_seconds()
+    return f"PT{max(1, math.ceil(remaining / 60))}M"
+
+
+def order_body(order, items, fee, total):
     event = order.event
     back_url = f"{settings.FRONT_BASE_URL}/{event.venue.slug}/{event.slug}/pedido/{order.pk}"
     body = {
+        "type": "online",
+        "processing_mode": "manual",
+        "capture_mode": "automatic",
+        "total_amount": _money(total),
+        "external_reference": str(order.pk),
+        "expiration_time": expiration_time(order),
+        "payer": {"email": order.buyer_email},
         "items": [
             {
                 "title": f"{item.ticket_type.name} · {event.title}",
                 "quantity": item.quantity,
-                "unit_price": _number(item.unit_price + item.unit_service_fee),
-                "currency_id": "ARS",
+                "unit_price": _money(item.unit_price + item.unit_service_fee),
             }
             for item in items
         ],
-        "payer": {"email": order.buyer_email},
-        "external_reference": str(order.pk),
-        "back_urls": {"success": back_url, "failure": back_url, "pending": back_url},
-        "auto_return": "approved",
-        "notification_url": settings.PUBLIC_API_URL + WEBHOOK_PATH,
-        "expires": True,
-        "expiration_date_to": order.expires_at.isoformat(),
-        "payment_methods": {"excluded_payment_types": [{"id": kind} for kind in EXCLUDED_PAYMENT_TYPES]},
-        "binary_mode": True,
+        "config": {
+            "online": {
+                "success_url": back_url,
+                "failure_url": back_url,
+                "pending_url": back_url,
+                "auto_return": "approved",
+            },
+            "payment_method": {"not_allowed_types": list(EXCLUDED_PAYMENT_TYPES)},
+        },
     }
     if fee > 0:
-        body["marketplace_fee"] = _number(fee)
+        body["marketplace_fee"] = _money(fee)
     return body
 
 
@@ -69,7 +88,7 @@ def preference_body(order, items, fee):
 @require_POST
 @never_cache
 def order_payment(request, venue_slug, event_slug, order_id):
-    if not (settings.FRONT_BASE_URL and settings.PUBLIC_API_URL and mp_connect.is_configured()):
+    if not (settings.FRONT_BASE_URL and mp_connect.is_configured()):
         return mp_connect.not_configured()
     with transaction.atomic():
         order = (
@@ -95,14 +114,14 @@ def order_payment(request, venue_slug, event_slug, order_id):
         total = sum((item.quantity * (item.unit_price + item.unit_service_fee) for item in items), Decimal(0))
         fee = min(platform_fee(venue, items), total)
         try:
-            preference = mp.create_preference(access_token, preference_body(order, items, fee))
-            preference_id, init_point = str(preference["id"]), preference["init_point"]
-            if not preference_id or not init_point:
-                raise KeyError("init_point")
-        except (mp.MercadoPagoError, KeyError, TypeError):
+            mp_order = mp.create_order(access_token, order_body(order, items, fee, total), idempotency_key(order))
+            order_id, init_point = str(mp_order["id"]), mp_order["checkout_url"]
+            if not mp_order["id"] or not init_point or Decimal(str(mp_order["total_amount"])) != total.quantize(CENT):
+                raise KeyError("order")
+        except (mp.MercadoPagoError, KeyError, TypeError, ArithmeticError, ValueError):
             return _error("mp_unavailable", 502)
         order.platform_fee = fee
-        order.mp_preference_id = preference_id
+        order.mp_order_id = order_id
         order.mp_init_point = init_point
-        order.save(update_fields=["platform_fee", "mp_preference_id", "mp_init_point"])
+        order.save(update_fields=["platform_fee", "mp_order_id", "mp_init_point"])
     return JsonResponse({"initPoint": init_point})

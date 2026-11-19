@@ -126,7 +126,7 @@ class Order(models.Model):
     expires_at = models.DateTimeField()
     paid_at = models.DateTimeField(null=True, blank=True)
     platform_fee = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
-    mp_preference_id = models.CharField(max_length=100, blank=True)
+    mp_order_id = models.CharField(max_length=64, blank=True)
     mp_init_point = models.URLField(max_length=500, blank=True)
 
     class Meta:
@@ -179,7 +179,8 @@ class Payment(models.Model):
         NOT_APPROVED = "not_approved", "No aprobado"
 
     order = models.ForeignKey(Order, on_delete=models.PROTECT, related_name="payments")
-    mp_payment_id = models.BigIntegerField(unique=True)
+    mp_order_id = models.CharField(max_length=64, unique=True)
+    mp_reference = models.CharField(max_length=100, blank=True)
     mp_user_id = models.BigIntegerField()
     status = models.CharField(max_length=30)
     status_detail = models.CharField(max_length=100, blank=True)
