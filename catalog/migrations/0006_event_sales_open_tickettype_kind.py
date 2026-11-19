@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('catalog', '0011_mp_orders'),
+        ('catalog', '0005_revoke_venue_staff'),
     ]
 
     operations = [

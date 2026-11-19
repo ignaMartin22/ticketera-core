@@ -8,7 +8,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('catalog', '0012_event_sales_open_tickettype_kind'),
+        ('catalog', '0006_event_sales_open_tickettype_kind'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

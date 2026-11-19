@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('catalog', '0009_order_payment_preference'),
+        ('catalog', '0011_order_payment_preference'),
     ]
 
     operations = [

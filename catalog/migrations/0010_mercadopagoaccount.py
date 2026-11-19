@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('catalog', '0007_doorloginfailure'),
+        ('catalog', '0009_doorloginfailure'),
     ]
 
     operations = [
