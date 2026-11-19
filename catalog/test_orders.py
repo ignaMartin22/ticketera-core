@@ -24,10 +24,16 @@ def create_catalog(slug):
     )
 
 
-def create_order(client, key, venue="moon", ticket_type="general", quantity=2):
+def create_order(client, key, venue="moon", ticket_type="general", quantity=2, **buyer):
     return client.post(
         reverse("order-create", args=[venue, "fecha"]),
-        {"email": "buyer@example.com", "items": [{"ticketTypeId": ticket_type, "quantity": quantity}]},
+        {
+            "email": "buyer@example.com",
+            "name": "Juan Pérez",
+            "phone": "+5493884123456",
+            **buyer,
+            "items": [{"ticketTypeId": ticket_type, "quantity": quantity}],
+        },
         content_type="application/json",
         headers={"Idempotency-Key": str(key)},
     )
@@ -73,6 +79,17 @@ class OrderTests(TestCase):
         self.assertEqual(replay.json()["order"], first)
         self.assertEqual(create_order(self.client, key, quantity=2).status_code, 409)
         self.assertEqual(Order.objects.count(), 1)
+
+    def test_buyer_contact_is_validated_stored_and_private(self):
+        self.assertEqual(create_order(self.client, uuid4(), name="  ").json()["error"], "invalid_name")
+        self.assertEqual(create_order(self.client, uuid4(), phone="3884123456").json()["error"], "invalid_phone")
+        key = uuid4()
+        order = create_order(self.client, key, name="  Juan   Pérez ").json()["order"]
+        self.assertNotIn("phone", order)
+        stored = Order.objects.get(pk=order["id"])
+        self.assertEqual((stored.buyer_name, stored.buyer_phone), ("Juan Pérez", "+5493884123456"))
+        self.assertEqual(create_order(self.client, key, name="Juan Pérez").status_code, 200)
+        self.assertEqual(create_order(self.client, key, phone="+5493884000000").status_code, 409)
 
     def test_orders_are_scoped_to_venue_and_event(self):
         key = uuid4()

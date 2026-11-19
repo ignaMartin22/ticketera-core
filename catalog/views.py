@@ -1,4 +1,5 @@
 import json
+import re
 from uuid import UUID
 
 from django.core.exceptions import RequestDataTooBig, ValidationError
@@ -13,6 +14,9 @@ from django.views.decorators.http import require_POST, require_safe
 
 from .models import Event, Order, TicketType, Venue
 from .orders import MAX_TICKETS_PER_ORDER, OrderConflict, reserve_order
+
+# E.164: + y entre 8 y 15 dígitos. El front manda los celulares argentinos como +549XXXXXXXXXX.
+PHONE_RE = re.compile(r"\+[1-9]\d{7,14}")
 
 
 def venue_data(venue):
@@ -122,6 +126,13 @@ def order_input(request):
         raise ValidationError("invalid_email")
     email = email.strip()
     validate_email(email)
+    name = data.get("name")
+    if not isinstance(name, str) or not 1 <= len(" ".join(name.split())) <= 150:
+        raise ValidationError("invalid_name")
+    name = " ".join(name.split())
+    phone = data.get("phone")
+    if not isinstance(phone, str) or not PHONE_RE.fullmatch(phone):
+        raise ValidationError("invalid_phone")
     items = data.get("items")
     if not isinstance(items, list) or not 1 <= len(items) <= MAX_TICKETS_PER_ORDER:
         raise ValidationError("invalid_items")
@@ -138,7 +149,7 @@ def order_input(request):
         quantities[slug] = quantity
     if sum(quantities.values()) > MAX_TICKETS_PER_ORDER:
         raise ValidationError("order_limit_exceeded")
-    return email, quantities, key
+    return {"email": email, "name": name, "phone": phone}, quantities, key
 
 
 @csrf_exempt  # The endpoint accepts only JSON and uses no session credentials.
@@ -148,8 +159,8 @@ def order_create(request, venue_slug, event_slug):
     if request.content_type != "application/json":
         return JsonResponse({"error": "expected_json"}, status=415)
     try:
-        email, quantities, key = order_input(request)
-        order, items, created = reserve_order(venue_slug, event_slug, email, quantities, key)
+        buyer, quantities, key = order_input(request)
+        order, items, created = reserve_order(venue_slug, event_slug, buyer, quantities, key)
     except RequestDataTooBig:
         return JsonResponse({"error": "request_too_large"}, status=413)
     except ValidationError as exc:

@@ -15,7 +15,8 @@ class OrderConflict(Exception):
 
 
 @transaction.atomic
-def reserve_order(venue_slug, event_slug, buyer_email, quantities, idempotency_key):
+def reserve_order(venue_slug, event_slug, buyer, quantities, idempotency_key):
+    """buyer: dict con email, name y phone ya validados."""
     # The event lock serializes reservations (including retries with the same key).
     event = Event.objects.select_related("venue").select_for_update(of=("self",)).get(
         venue__slug=venue_slug, venue__is_active=True, slug=event_slug, is_published=True,
@@ -24,7 +25,10 @@ def reserve_order(venue_slug, event_slug, buyer_email, quantities, idempotency_k
     if existing:
         items = list(existing.items.all())
         existing_quantities = {item.ticket_slug: item.quantity for item in items}
-        if buyer_email != existing.buyer_email or quantities != existing_quantities:
+        same_buyer = (existing.buyer_email, existing.buyer_name, existing.buyer_phone) == (
+            buyer["email"], buyer["name"], buyer["phone"],
+        )
+        if not same_buyer or quantities != existing_quantities:
             raise OrderConflict("idempotency_key_reused")
         return existing, items, False
 
@@ -45,7 +49,8 @@ def reserve_order(venue_slug, event_slug, buyer_email, quantities, idempotency_k
             raise OrderConflict("insufficient_capacity")
 
     order = Order.objects.create(
-        event=event, buyer_email=buyer_email, idempotency_key=idempotency_key,
+        event=event, buyer_email=buyer["email"], buyer_name=buyer["name"], buyer_phone=buyer["phone"],
+        idempotency_key=idempotency_key,
         expires_at=now + RESERVATION_DURATION,
     )
     fee_rate = event.venue.buyer_fee_rate if event.venue.fee_mode == Venue.FeeMode.BUYER else Decimal(0)

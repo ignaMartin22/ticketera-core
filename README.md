@@ -1,6 +1,6 @@
 # Ticketera Core
 
-Backend de TicketJuy para operar varios boliches desde una misma plataforma. Moon es el primer cliente. El frontend y el alcance del producto viven en [TicketJuy](https://github.com/ignaMartin22/TicketJuy).
+Backend de TicketJuy para operar varios boliches desde una misma plataforma. Infinity (ex Moon) es el primer cliente. El frontend y el alcance del producto viven en [TicketJuy](https://github.com/ignaMartin22/TicketJuy).
 
 ## Ejecutar el catálogo localmente
 
@@ -18,7 +18,7 @@ $env:POSTGRES_PASSWORD = "<contraseña de desarrollo>"
 .venv/Scripts/python.exe manage.py runserver
 ```
 
-Abrí `http://127.0.0.1:8000/admin/` para crear un boliche, un evento y sus tipos de entrada. Activá el boliche y publicá el evento para verlo por API. Para delegar el catálogo, creá un usuario con estado de personal y una membresía de administración en ese boliche. Las membresías de puerta y caja quedan registradas para sus futuras herramientas.
+Para tener datos de prueba, `.venv/Scripts/python.exe manage.py seed_infinity` crea el boliche `infinity` con las mismas fechas que la demo de TicketJuy. Abrí `http://127.0.0.1:8000/admin/` para crear un boliche, un evento y sus tipos de entrada. Activá el boliche y publicá el evento para verlo por API. Para delegar el catálogo, creá un usuario con estado de personal y una membresía de administración en ese boliche. Las membresías de puerta y caja quedan registradas para sus futuras herramientas.
 
 La conexión usa `localhost:5432` por defecto. Configurá `POSTGRES_HOST`, `POSTGRES_PORT` y `POSTGRES_SSLMODE` según la instancia. Fuera de desarrollo, configurá también `DJANGO_SECRET_KEY` y `DJANGO_ALLOWED_HOSTS`.
 
@@ -39,13 +39,15 @@ Los identificadores públicos son slugs. El slug de un evento se resuelve dentro
 ```json
 {
   "email": "comprador@example.com",
+  "name": "Juan Pérez",
+  "phone": "+5493884123456",
   "items": [{ "ticketTypeId": "general", "quantity": 2 }]
 }
 ```
 
-La respuesta `201` incluye `order.id`, `status`, `expiresAt` y los importes en ARS como cadenas decimales. El backend guarda los precios y el cargo de servicio vigentes en el momento de reservar. El máximo es 10 entradas por pedido. Un reintento con el mismo contenido devuelve `200` con el pedido original. Una clave reutilizada con otro contenido o el cupo insuficiente devuelven `409`.
+`name` es el nombre y apellido del titular. `phone` es el WhatsApp en formato E.164 (`+549` y los 10 dígitos para celulares argentinos). La respuesta `201` incluye `order.id`, `status`, `expiresAt` y los importes en ARS como cadenas decimales. El backend guarda los precios y el cargo de servicio vigentes en el momento de reservar. El máximo es 10 entradas por pedido. Un reintento con el mismo contenido devuelve `200` con el pedido original. Una clave reutilizada con otro contenido o el cupo insuficiente devuelven `409`.
 
-`GET /api/v1/venues/<boliche>/events/<evento>/orders/<uuid>/` devuelve el estado `pending_payment` o `expired`. El pedido reserva cupo durante 10 minutos. Al vencimiento, ese cupo vuelve a estar disponible en las consultas y en nuevas compras sin una tarea periódica. Conservá el UUID como dato privado del comprador. La respuesta omite su email.
+`GET /api/v1/venues/<boliche>/events/<evento>/orders/<uuid>/` devuelve el estado `pending_payment` o `expired`. El pedido reserva cupo durante 10 minutos. Al vencimiento, ese cupo vuelve a estar disponible en las consultas y en nuevas compras sin una tarea periódica. Conservá el UUID como dato privado del comprador. La respuesta omite su email, nombre y teléfono.
 
 La confirmación de pagos, la emisión y el manejo de pagos tardíos forman parte de la siguiente integración. Antes de habilitar la compra pública, agregá protección contra reservas automatizadas en el punto de entrada.
 
@@ -70,4 +72,4 @@ Los archivos seleccionados están disponibles en [la referencia local](reference
 4. Escaneo en puerta con sincronización offline y panel de ventas y asistencia. Si dos dispositivos están desconectados, pueden aceptar el mismo QR antes de sincronizar. El piloto necesita una regla de operación para resolver ese caso.
 5. Caja, RRPP, listas y mesas VIP después del MVP.
 
-El aislamiento de datos por boliche aplica desde la primera entrega. El piloto usa Moon, y las pruebas deben incluir un segundo boliche para detectar accesos cruzados.
+El aislamiento de datos por boliche aplica desde la primera entrega. El piloto usa Infinity, y las pruebas deben incluir un segundo boliche para detectar accesos cruzados.
