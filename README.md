@@ -148,3 +148,25 @@ Los archivos seleccionados están disponibles en [la referencia local](reference
 Los pasos 1 y 2 están hechos. Del paso 3 está la emisión de entradas, y del paso 4 el escaneo en puerta con conexión y la asistencia; faltan Mercado Pago, el modo offline y el panel de ventas. Lo que falta para el piloto con Infinity está en [pendientes](docs/pendientes.md).
 
 El aislamiento de datos por boliche aplica desde la primera entrega. El piloto usa Infinity, y las pruebas deben incluir un segundo boliche para detectar accesos cruzados.
+
+## Mercado Pago: pago del pedido
+
+El front le pide al backend el link de pago de un pedido con precio y redirige al comprador. El backend crea una preferencia de Checkout Pro con el token del boliche y la comisión de la plataforma (`marketplace_fee`). La confirmación del pago (webhook) va en otro slice.
+
+| Variable | Uso |
+| --- | --- |
+| `PUBLIC_API_URL` | URL pública de este backend; la `notification_url` es `<PUBLIC_API_URL>/api/v1/mercadopago/webhook/` |
+| `FRONT_BASE_URL` | URL pública del front; las `back_urls` son `<FRONT_BASE_URL>/<boliche>/<evento>/pedido/<id>` |
+
+`POST /api/v1/venues/<boliche>/events/<evento>/orders/<uuid>/payment/` es público (quien tiene el uuid del pedido puede pagar) y no lleva cuerpo. Devuelve `200 { initPoint }`. Si el pedido ya tiene link y sigue vigente devuelve el mismo, sin llamar de nuevo a Mercado Pago.
+
+| Código | Cuándo |
+| --- | --- |
+| `404 not_found` | El pedido no existe o no es de ese boliche y evento |
+| `409 order_already_paid` | El pedido ya está pagado (incluye los pedidos gratis) |
+| `409 order_expired` | La reserva venció |
+| `409 venue_not_connected` | El boliche no tiene una cuenta de Mercado Pago utilizable |
+| `502 mp_unavailable` | Mercado Pago falló al crear la preferencia; no se guarda nada |
+| `503 mp_not_configured` | Falta `PUBLIC_API_URL`, `FRONT_BASE_URL` o la configuración de Mercado Pago |
+
+Cada ítem de la preferencia es una línea del pedido, con el precio por unidad que paga el comprador (precio más cargo de servicio); la suma da el total del pedido. Solo se manda el email del comprador, nunca el nombre ni el teléfono. La preferencia vence junto con la reserva, excluye los pagos en efectivo (`ticket`, `atm`) y usa `binary_mode` (el pago se aprueba o se rechaza). La comisión de la plataforma es la suma de cantidad por `redondeo(precio × buyer_fee_rate)` de cada ítem, con los precios guardados en el pedido y en los dos modos de cargo del boliche; se guarda en `Order.platform_fee` junto con `mp_preference_id` y `mp_init_point`. Con tasa 0 la preferencia no lleva `marketplace_fee`.

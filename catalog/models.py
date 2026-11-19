@@ -125,6 +125,9 @@ class Order(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField()
     paid_at = models.DateTimeField(null=True, blank=True)
+    platform_fee = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    mp_preference_id = models.CharField(max_length=100, blank=True)
+    mp_init_point = models.URLField(max_length=500, blank=True)
 
     class Meta:
         constraints = [
