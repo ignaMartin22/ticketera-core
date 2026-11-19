@@ -165,6 +165,18 @@ gunzip -c /opt/ticketjuy/backups/<archivo>.sql.gz | docker compose -f /opt/ticke
 
 (En una base con datos, restaurar sobre una base vacía: `down -v` y levantar de nuevo antes.)
 
+## Cuenta de Mercado Pago de prueba sin OAuth
+
+Para probar el circuito de pago sin pasar por la autorización, se puede cargar directo el access token de una cuenta vendedora de prueba de Mercado Pago como la cuenta del boliche. El token se lee de la entrada estándar (así no queda en el historial ni en la lista de procesos) desde un archivo, sin imprimirlo:
+
+```bash
+docker compose -f deploy/docker-compose.yml exec -T web python manage.py mp_set_test_account infinity < /ruta/al/archivo-con-el-token
+```
+
+- Solo sirve con `MP_TEST_TOKENS=1` (y `MP_TOKEN_ENCRYPTION_KEY` configurada).
+- Solo acepta cuentas de prueba (las que Mercado Pago marca con `test_user`); una cuenta real se rechaza y no se guarda nada.
+- No reemplaza la prueba de la conexión por OAuth: ese flujo se sigue probando aparte.
+
 ## 9. Actualizar y volver atrás
 
 Antes de actualizar, hacer un backup: `/opt/ticketjuy/deploy/backup.sh`.

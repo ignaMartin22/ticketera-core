@@ -83,6 +83,13 @@ def get_order(access_token, order_id):
     return _call(lambda _: order.get(order_id), None)
 
 
+def get_user(access_token):
+    """Perfil de la cuenta dueña del access token (`/users/me`): id, nickname, site_id, tags."""
+    options = RequestOptions(connection_timeout=TIMEOUT_SECONDS, max_retries=0)
+    user = SDK(access_token, request_options=options).user()
+    return _call(lambda _: user.get(), None)
+
+
 def webhook_signature_is_valid(x_signature, x_request_id, data_id):
     """Valida la firma del aviso con la clave de la aplicación. Nunca levanta."""
     secret = settings.MP_WEBHOOK_SECRET
