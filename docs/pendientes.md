@@ -7,7 +7,8 @@ Qué falta para vender una fecha real de Infinity con TicketJuy. Estado al 19/11
 - Catálogo multi-boliche: boliches, membresías, eventos y tipos de entrada, con admin limitado por boliche (#2).
 - Pedidos sin cuenta con reserva de cupo de 10 minutos e idempotencia (#3).
 - Nombre y WhatsApp del comprador en el pedido, y `manage.py seed_infinity` para desarrollo (#4).
-- Panel de la plataforma en `/plataforma/`: alta y pausa de boliches, comisión con historial (cargo al comprador y comisión de la plataforma), equipo con links de acceso y estado de las conexiones. Ver las [specs](specs/README.md).
+- Panel de la plataforma en `/plataforma/`, solo para el equipo de la plataforma: alta y pausa de boliches, comisión con historial (cargo al comprador y comisión de la plataforma), equipo de cada boliche y estado de las conexiones.
+- La gente de los boliches no entra al core: cada cliente tiene su repo con su sitio y su dashboard. Ver las [specs](specs/README.md).
 - TicketJuy lee el catálogo de esta API y el checkout reserva el cupo (TicketJuy #12). La página del pedido muestra la reserva con el botón de pago deshabilitado.
 
 ## Para vender una fecha real
@@ -25,11 +26,12 @@ Qué falta para vender una fecha real de Infinity con TicketJuy. Estado al 19/11
 
 6. Para el piloto, cada boliche carga su catálogo en el admin de Django y la plataforma lo administra desde `/plataforma/`. Falta ver los pedidos y compradores por boliche en el panel.
 7. Reporte de ventas, plata e ingresos por fecha.
-8. Conectar el panel `/admin` de TicketJuy al core según la [spec del ABM de eventos](specs/eventos-del-boliche.md). Hoy lo que carga el dueño queda en su navegador. Falta en el core:
+8. Conectar el dashboard `/admin` de TicketJuy (el repo de Infinity) al core según la [spec del ABM de eventos](specs/eventos-del-boliche.md). Hoy lo que carga el dueño queda en su navegador. Falta en el core:
    - Venta pausada por fecha, portada de la fecha y tipo de entrada común o VIP.
    - Identificadores que no cambien al editar.
    - Reglas de baja según haya ventas o no.
-   - Una API de gestión con login del dueño.
+   - Una API de gestión con login del dueño, hecho desde el dashboard: la gente del boliche no entra al core.
+   - Una credencial por repo de cliente, generada desde `/plataforma/` ([Clientes](specs/clientes.md)).
 
 ## Puesta en producción
 

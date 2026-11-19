@@ -4,19 +4,15 @@ from functools import wraps
 from django.contrib import messages
 from django.contrib.auth import views as auth_views
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.tokens import default_token_generator
 from django.db import transaction
 from django.db.models import Count, Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
-from django.urls import reverse, reverse_lazy
 from django.utils import timezone
-from django.utils.encoding import force_bytes
-from django.utils.http import urlsafe_base64_encode
 from django.views.decorators.http import require_POST
 
 from catalog.models import Membership, OrderItem, TicketType, Venue, VenueIntegration
 
-from .forms import FeeForm, MemberForm, VenueCreateForm, VenueForm, sync_staff
+from .forms import FeeForm, MemberForm, VenueCreateForm, VenueForm
 
 
 def platform_required(view):
@@ -36,14 +32,6 @@ class LoginView(auth_views.LoginView):
     template_name = "backoffice/login.html"
     redirect_authenticated_user = True
 
-
-class SetPasswordView(auth_views.PasswordResetConfirmView):
-    template_name = "backoffice/set_password.html"
-    success_url = reverse_lazy("backoffice:set-password-done")
-
-
-def set_password_done(request):
-    return render(request, "backoffice/set_password_done.html")
 
 
 def integrations_for(venue):
@@ -125,9 +113,9 @@ def venue_toggle(request, slug):
     venue.is_active = not venue.is_active
     venue.save(update_fields=["is_active"])
     if venue.is_active:
-        messages.success(request, f"{venue.name} está activo: sus fechas publicadas se ven en TicketJuy.")
+        messages.success(request, f"{venue.name} está activo: la API expone sus fechas publicadas.")
     else:
-        messages.success(request, f"{venue.name} quedó pausado: ya no aparece en TicketJuy ni acepta reservas.")
+        messages.success(request, f"{venue.name} quedó pausado: la API ya no expone sus fechas ni acepta reservas.")
     return redirect("backoffice:venue-detail", slug=venue.slug)
 
 
@@ -156,40 +144,18 @@ def venue_fees(request, slug):
     return render(request, "backoffice/venue_fees.html", venue_context(venue, "fees", form=form, history=history))
 
 
-def access_link(request, user):
-    uid = urlsafe_base64_encode(force_bytes(user.pk))
-    token = default_token_generator.make_token(user)
-    return request.build_absolute_uri(reverse("backoffice:set-password", args=[uid, token]))
-
-
 @platform_required
 def venue_team(request, slug):
     venue = get_object_or_404(Venue, slug=slug)
     form = MemberForm(request.POST or None)
-    link = None
     if request.method == "POST" and form.is_valid():
-        membership, created = form.save(venue)
-        user = membership.user
-        messages.success(request, f"{user.email} tiene el rol {membership.get_role_display()} en {venue.name}.")
-        if not user.has_usable_password():
-            link = {"email": user.email, "url": access_link(request, user)}
-        form = MemberForm()
+        membership, _ = form.save(venue)
+        messages.success(
+            request, f"{membership.user.email} tiene el rol {membership.get_role_display()} en {venue.name}.",
+        )
+        return redirect("backoffice:venue-team", slug=venue.slug)
     members = venue.memberships.select_related("user").order_by("role", "user__email")
-    return render(request, "backoffice/venue_team.html", venue_context(
-        venue, "team", form=form, members=members, link=link,
-    ))
-
-
-@platform_required
-@require_POST
-def member_link(request, slug, pk):
-    membership = get_object_or_404(Membership, pk=pk, venue__slug=slug)
-    venue = membership.venue
-    members = venue.memberships.select_related("user").order_by("role", "user__email")
-    link = {"email": membership.user.email, "url": access_link(request, membership.user)}
-    return render(request, "backoffice/venue_team.html", venue_context(
-        venue, "team", form=MemberForm(), members=members, link=link,
-    ))
+    return render(request, "backoffice/venue_team.html", venue_context(venue, "team", form=form, members=members))
 
 
 @platform_required
@@ -198,7 +164,6 @@ def member_remove(request, slug, pk):
     membership = get_object_or_404(Membership, pk=pk, venue__slug=slug)
     user = membership.user
     membership.delete()
-    sync_staff(user)
     messages.success(request, f"{user.email} ya no tiene acceso a {membership.venue.name}.")
     return redirect("backoffice:venue-team", slug=slug)
 

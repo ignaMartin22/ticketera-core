@@ -2,11 +2,11 @@
 
 Panel web para que el equipo de la plataforma dé de alta boliches, defina sus comisiones, dé acceso a su gente y vea sus conexiones. Vive en `/plataforma/`, dentro del core (app `backoffice`), con páginas de Django y sin dependencias de frontend.
 
-No reemplaza al `/admin/` de Django: los administradores de cada boliche siguen cargando sus fechas y entradas ahí.
+Junto con el `/admin/` de Django, es la administración del core, y la usa solo el equipo de la plataforma. La gente de cada boliche trabaja desde el dashboard del repo de su boliche: ver [Clientes](clientes.md).
 
 ## Acceso
 
-- **Debe:** solo los superusuarios usan el panel. Sin sesión, redirige a `/plataforma/entrar/`. Con sesión de otro usuario, responde 403 con un link al `/admin/`.
+- **Debe:** solo los superusuarios usan el panel. Sin sesión, redirige a `/plataforma/entrar/`. Con sesión de otro usuario, responde 403.
 - **Debe:** el 403 aplica también a los POST: un administrador de boliche no puede cambiar comisiones ni equipo.
 - Las acciones que cambian datos son POST con token CSRF. Salir también es POST.
 
@@ -20,9 +20,8 @@ No reemplaza al `/admin/` de Django: los administradores de cada boliche siguen 
 | `/plataforma/boliches/<slug>/` | Resumen |
 | `/plataforma/boliches/<slug>/datos/` | Datos y marca |
 | `/plataforma/boliches/<slug>/comision/` | Comisión e historial |
-| `/plataforma/boliches/<slug>/equipo/` | Equipo y accesos |
+| `/plataforma/boliches/<slug>/equipo/` | Equipo |
 | `/plataforma/boliches/<slug>/conexiones/` | Conexiones |
-| `/plataforma/clave/<uid>/<token>/` | Creación de contraseña para un miembro nuevo |
 
 ### Lista de boliches
 
@@ -39,7 +38,7 @@ Una tarjeta por boliche con: nombre, slug, ciudad, color, estado (activo o pausa
 
 - **Para empezar a vender:** datos y marca (dirección y logo), comisión definida, administrador asignado, Mercado Pago conectado y una fecha publicada.
 - **Números:** entradas vendidas, reservas vigentes, cargo al comprador y comisión.
-- **Próximas fechas:** hasta 6, desde 12 horas antes de ahora, con estado y vendidas sobre cupo. El botón "Editar catálogo" lleva al `/admin/` filtrado por el boliche.
+- **Próximas fechas:** hasta 6, desde 12 horas antes de ahora, con estado y vendidas sobre cupo. El botón "Editar catálogo" lleva al `/admin/` del core filtrado por el boliche, para que la plataforma cargue fechas mientras el dashboard del boliche no esté conectado.
 - **Activar o pausar:** pausar pide confirmación. **Debe:** pausar saca al boliche de la API pública al instante, y activarlo lo vuelve a mostrar.
 
 ### Datos
@@ -55,14 +54,14 @@ Los mismos campos del alta, salvo el slug.
 
 ### Equipo
 
-- Lista de miembros con rol y si ya crearon su contraseña.
-- **Dar acceso:** email, nombre opcional y rol.
-  - **Debe:** si no existe un usuario con ese email, se crea con usuario = email (en minúsculas) y sin contraseña.
-  - **Debe:** si ya existe, se reutiliza. Si ya era miembro del boliche, se le cambia el rol. Su contraseña no se toca.
-  - **Debe:** si el usuario no tiene contraseña, el panel muestra un link para crearla.
-- **Link de acceso:** se puede volver a generar para cualquier miembro. Sirve una sola vez y vence a los 3 días (`PASSWORD_RESET_TIMEOUT` de Django). El panel no lo manda: se copia y se envía por WhatsApp.
-- **Quitar:** pide confirmación y borra la membresía. **Debe:** si el usuario deja de administrar algún boliche, pierde `is_staff`.
-- Sincronización de `is_staff`: ver [Multi-boliche](multi-boliche.md).
+Quiénes administran el boliche desde el dashboard de su sitio. Cargarlos acá no les da acceso al core.
+
+- Lista de miembros con su rol.
+- **Agregar:** email, nombre opcional y rol.
+  - **Debe:** si no existe un usuario con ese email, se crea con usuario = email (en minúsculas), sin contraseña y sin `is_staff`.
+  - **Debe:** si ya existe (sin importar mayúsculas), se reutiliza. Si ya era miembro del boliche, se le cambia el rol.
+- **Quitar:** pide confirmación y borra la membresía.
+- Pendiente: la creación de la contraseña y el ingreso, desde el dashboard del boliche y con la API de gestión.
 
 ### Conexiones
 

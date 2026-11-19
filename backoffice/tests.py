@@ -17,7 +17,7 @@ class BackofficeTests(TestCase):
         cls.root = User.objects.create_superuser("root", "root@example.com", "x")
         cls.venue = Venue.objects.create(slug="moon", name="Moon", city="Jujuy", is_active=True)
         cls.other = Venue.objects.create(slug="other", name="Otro", city="Jujuy")
-        cls.venue_admin = User.objects.create_user("moon-admin", "admin@moon.test", is_staff=True)
+        cls.venue_admin = User.objects.create_user("moon-admin", "admin@moon.test")
         Membership.objects.create(venue=cls.venue, user=cls.venue_admin, role=Membership.Role.ADMIN)
 
     def setUp(self):
@@ -90,35 +90,27 @@ class BackofficeTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("platform_fee_percent", response.context["form"].errors)
 
-    def test_add_member_creates_user_with_access_link(self):
+    def test_add_member_creates_user_without_core_access(self):
         url = reverse("backoffice:venue-team", args=["other"])
         response = self.client.post(url, {"email": "Duena@Otro.test", "name": "Dueña", "role": "admin"})
+        self.assertRedirects(response, url)
         user = User.objects.get(email="duena@otro.test")
-        self.assertTrue(user.is_staff)
+        self.assertEqual(user.username, "duena@otro.test")
+        self.assertFalse(user.is_staff)
         self.assertFalse(user.has_usable_password())
         self.assertTrue(Membership.objects.filter(venue=self.other, user=user, role="admin").exists())
-        link = response.context["link"]["url"]
-        self.assertIn("/plataforma/clave/", link)
 
-        response = self.client.get(link, follow=True)
-        response = self.client.post(response.redirect_chain[-1][0],
-                                    {"new_password1": "una-clave-larga-9", "new_password2": "una-clave-larga-9"})
-        self.assertRedirects(response, reverse("backoffice:set-password-done"))
-        user.refresh_from_db()
-        self.assertTrue(user.check_password("una-clave-larga-9"))
-
-    def test_existing_user_keeps_password_and_removal_revokes_staff(self):
+    def test_existing_user_changes_role_and_can_be_removed(self):
         url = reverse("backoffice:venue-team", args=["other"])
         self.client.post(url, {"email": "admin@moon.test", "role": "door"})
+        self.client.post(url, {"email": "ADMIN@moon.test", "role": "cashier"})
         door = Membership.objects.get(venue=self.other, user=self.venue_admin)
-        self.assertEqual(door.role, "door")
-        self.venue_admin.refresh_from_db()
-        self.assertTrue(self.venue_admin.is_staff)  # Sigue administrando Moon.
+        self.assertEqual(door.role, "cashier")
+        self.assertEqual(User.objects.filter(email__iexact="admin@moon.test").count(), 1)
 
         moon = Membership.objects.get(venue=self.venue, user=self.venue_admin)
         self.client.post(reverse("backoffice:member-remove", args=["moon", moon.pk]))
-        self.venue_admin.refresh_from_db()
-        self.assertFalse(self.venue_admin.is_staff)
+        self.assertFalse(Membership.objects.filter(pk=moon.pk).exists())
         # Una membresía de otro boliche no se puede tocar desde la URL de este.
         response = self.client.post(reverse("backoffice:member-remove", args=["moon", door.pk]))
         self.assertEqual(response.status_code, 404)

@@ -1,6 +1,6 @@
 # Catálogo y pedidos
 
-API pública que consume TicketJuy desde su servidor. El navegador del comprador no habla directo con el core.
+API pública que consume el repo de cada cliente (TicketJuy para Infinity) desde su servidor. El navegador del comprador no habla directo con el core.
 
 ## Catálogo
 

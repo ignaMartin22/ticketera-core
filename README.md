@@ -1,6 +1,6 @@
 # Ticketera Core
 
-Backend de TicketJuy para operar varios boliches desde una misma plataforma. Infinity (ex Moon) es el primer cliente. El frontend y el alcance del producto viven en [TicketJuy](https://github.com/ignaMartin22/TicketJuy).
+Backend compartido para operar varios boliches desde una misma plataforma. Cada boliche cliente tiene su propio repo de frontend, con su sitio público y el dashboard del dueño, que se conecta a esta API. Infinity (ex Moon) es el primer cliente y su repo es [TicketJuy](https://github.com/ignaMartin22/TicketJuy). La administración del core la usa solo el equipo de la plataforma: ver [Clientes](docs/specs/clientes.md).
 
 ## Ejecutar el catálogo localmente
 
@@ -23,13 +23,15 @@ Para tener datos de prueba, `.venv/Scripts/python.exe manage.py seed_infinity` c
 Hay dos paneles:
 
 - `http://127.0.0.1:8000/plataforma/`: el [panel de la plataforma](docs/specs/panel-plataforma.md), solo para superusuarios. Ahí se dan de alta los boliches, se activan o pausan, se definen sus comisiones, se da acceso a su equipo y se ven sus conexiones.
-- `http://127.0.0.1:8000/admin/`: el admin de Django, donde cada boliche carga sus eventos y tipos de entrada. Un administrador de boliche ve solo los suyos. Publicá el evento para verlo por API.
+- `http://127.0.0.1:8000/admin/`: el admin de Django, para cargar eventos y tipos de entrada mientras el dashboard de cada cliente no esté conectado a la API de gestión. Publicá el evento para verlo por API.
+
+Los dos son solo para superusuarios. La gente de cada boliche no entra al core.
 
 Las membresías de puerta y caja quedan registradas para sus futuras herramientas.
 
 ## Specs
 
-El comportamiento de cada parte del core está en [docs/specs](docs/specs/README.md): [multi-boliche](docs/specs/multi-boliche.md), [catálogo y pedidos](docs/specs/catalogo-y-pedidos.md), [ABM de eventos del boliche](docs/specs/eventos-del-boliche.md), [comisiones](docs/specs/comisiones.md), [panel de la plataforma](docs/specs/panel-plataforma.md) y [conexiones](docs/specs/conexiones.md). Si un cambio altera un comportamiento, actualizá la spec en el mismo PR.
+El comportamiento de cada parte del core está en [docs/specs](docs/specs/README.md): [clientes](docs/specs/clientes.md), [multi-boliche](docs/specs/multi-boliche.md), [catálogo y pedidos](docs/specs/catalogo-y-pedidos.md), [ABM de eventos del boliche](docs/specs/eventos-del-boliche.md), [comisiones](docs/specs/comisiones.md), [panel de la plataforma](docs/specs/panel-plataforma.md) y [conexiones](docs/specs/conexiones.md). Si un cambio altera un comportamiento, actualizá la spec en el mismo PR.
 
 La conexión usa `localhost:5432` por defecto. Configurá `POSTGRES_HOST`, `POSTGRES_PORT` y `POSTGRES_SSLMODE` según la instancia. Fuera de desarrollo, configurá también `DJANGO_SECRET_KEY` y `DJANGO_ALLOWED_HOSTS`.
 
