@@ -72,4 +72,6 @@ Los archivos seleccionados están disponibles en [la referencia local](reference
 4. Escaneo en puerta con sincronización offline y panel de ventas y asistencia. Si dos dispositivos están desconectados, pueden aceptar el mismo QR antes de sincronizar. El piloto necesita una regla de operación para resolver ese caso.
 5. Caja, RRPP, listas y mesas VIP después del MVP.
 
+Los pasos 1 y 2 están hechos. Lo que falta para el piloto con Infinity está en [pendientes](docs/pendientes.md).
+
 El aislamiento de datos por boliche aplica desde la primera entrega. El piloto usa Infinity, y las pruebas deben incluir un segundo boliche para detectar accesos cruzados.
