@@ -7,6 +7,8 @@ Qué falta para vender una fecha real de Infinity con TicketJuy. Estado al 19/11
 - Catálogo multi-boliche: boliches, membresías, eventos y tipos de entrada, con admin limitado por boliche (#2).
 - Pedidos sin cuenta con reserva de cupo de 10 minutos e idempotencia (#3).
 - Nombre y WhatsApp del comprador en el pedido, y `manage.py seed_infinity` para desarrollo (#4).
+- Entradas con QR firmado de un solo uso: se emiten al reservar un pedido gratis o al marcar un pedido como pagado en el admin.
+- API de portería: login del personal de puerta, escaneo que quema la entrada y asistencia por evento. Funciona solo con conexión.
 - TicketJuy lee el catálogo de esta API y el checkout reserva el cupo (TicketJuy #12). La página del pedido muestra la reserva con el botón de pago deshabilitado.
 
 ## Para vender una fecha real
@@ -15,9 +17,10 @@ Qué falta para vender una fecha real de Infinity con TicketJuy. Estado al 19/11
    - Al confirmar un pago, sumar a `sold` y dejar de contar el pedido en `TicketTypeQuerySet.with_reserved`. Si no, el cupo se cuenta dos veces hasta que vence la reserva.
    - Definir qué pasa si el pago llega después de que venció la reserva: emitir si queda cupo, o reembolsar.
    - Reembolsos.
-2. **Emisión de entradas.** Modelo `Ticket` con un QR firmado de un solo uso por cada unidad pagada. La página `/entrada/[code]` de TicketJuy todavía usa datos de prueba.
+2. **Página de la entrada.** La API ya devuelve las entradas del pedido con el texto del QR. La página `/entrada/[code]` de TicketJuy todavía usa datos de prueba.
 3. **Envío de entradas** por email y WhatsApp. La API de WhatsApp Business requiere aprobación de Meta y puede tardar: conviene pedirla ya.
-4. **Escáner de puerta** en el navegador del celular, que funcione sin señal y sincronice al volver. Falta una regla de operación para cuando dos celulares sin conexión aceptan el mismo QR.
+4. **Escáner de puerta** en el navegador del celular. La API de escaneo está hecha; falta la pantalla en TicketJuy que abre la cámara. Después, el modo sin señal con sincronización al volver, que necesita una regla de operación para cuando dos celulares sin conexión aceptan el mismo QR.
+   - Límite de intentos en el login de portería.
 5. **Protección contra reservas automatizadas** en `POST .../orders/` (captcha o verificación de bots y límite por IP). Hoy un bot puede bloquear cupo de a 10 entradas durante 10 minutos, una y otra vez.
 
 ## Panel y operación

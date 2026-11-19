@@ -18,7 +18,7 @@ $env:POSTGRES_PASSWORD = "<contraseña de desarrollo>"
 .venv/Scripts/python.exe manage.py runserver
 ```
 
-Para tener datos de prueba, `.venv/Scripts/python.exe manage.py seed_infinity` crea el boliche `infinity` con las mismas fechas que la demo de TicketJuy. Abrí `http://127.0.0.1:8000/admin/` para crear un boliche, un evento y sus tipos de entrada. Activá el boliche y publicá el evento para verlo por API. Para delegar el catálogo, creá un usuario con estado de personal y una membresía de administración en ese boliche. Las membresías de puerta y caja quedan registradas para sus futuras herramientas.
+Para tener datos de prueba, `.venv/Scripts/python.exe manage.py seed_infinity` crea el boliche `infinity` con las mismas fechas que la demo de TicketJuy. Abrí `http://127.0.0.1:8000/admin/` para crear un boliche, un evento y sus tipos de entrada. Activá el boliche y publicá el evento para verlo por API. Para delegar el catálogo, creá un usuario con estado de personal y una membresía de administración en ese boliche. La membresía de puerta habilita el escaneo de entradas. La de caja queda registrada para su futura herramienta.
 
 La conexión usa `localhost:5432` por defecto. Configurá `POSTGRES_HOST`, `POSTGRES_PORT` y `POSTGRES_SSLMODE` según la instancia. Fuera de desarrollo, configurá también `DJANGO_SECRET_KEY` y `DJANGO_ALLOWED_HOSTS`.
 
@@ -49,7 +49,43 @@ Los identificadores públicos son slugs. El slug de un evento se resuelve dentro
 
 `GET /api/v1/venues/<boliche>/events/<evento>/orders/<uuid>/` devuelve el estado `pending_payment` o `expired`. El pedido reserva cupo durante 10 minutos. Al vencimiento, ese cupo vuelve a estar disponible en las consultas y en nuevas compras sin una tarea periódica. Conservá el UUID como dato privado del comprador. La respuesta omite su email, nombre y teléfono.
 
-La confirmación de pagos, la emisión y el manejo de pagos tardíos forman parte de la siguiente integración. Antes de habilitar la compra pública, agregá protección contra reservas automatizadas en el punto de entrada.
+## Entradas y QR
+
+Cada unidad de un pedido pagado es una entrada con su propio QR. Un pedido con total $0 emite sus entradas al reservar. Un pedido con precio las emite cuando alguien con rol de administración del boliche lo selecciona en el admin de Django (`Pedidos`) y aplica "Marcar como pagado y emitir entradas". La integración con Mercado Pago va a llamar a la misma función, `catalog.tickets.issue_tickets`.
+
+El pedido pasa al estado `paid` y su respuesta incluye `tickets`, una lista vacía mientras no esté pagado:
+
+```json
+{ "id": "<uuid>", "ticketTypeId": "general", "ticketTypeName": "General", "qr": "<texto del QR>", "usedAt": null }
+```
+
+`qr` es el texto que el frontend dibuja como código QR: el id de la entrada más una firma hecha con `DJANGO_SECRET_KEY`. Cambiar esa clave invalida los QR ya emitidos.
+
+## Portería
+
+El personal de puerta entra con su usuario de Django. Necesita una membresía con rol `door` o `admin` en el boliche.
+
+| Ruta | Uso |
+| --- | --- |
+| `POST /api/v1/door/login/` | Recibe `{ username, password }` y devuelve `{ token, expiresIn, venues }`. El token dura 12 horas. |
+| `GET /api/v1/door/venues/<boliche>/events/` | Eventos publicados del boliche, para elegir la fecha de la noche. |
+| `POST /api/v1/door/venues/<boliche>/events/<evento>/scan/` | Recibe `{ token }` con el texto del QR y quema la entrada. |
+| `GET /api/v1/door/venues/<boliche>/events/<evento>/attendance/` | Entradas emitidas e ingresadas, por tipo y una por una. |
+
+Todas las rutas salvo el login llevan la cabecera `Authorization: Bearer <token>`. Sin token válido responden `401`; con un usuario sin rol en ese boliche, `404`.
+
+El escaneo responde según el campo `result`:
+
+| `result` | Estado | Significado |
+| --- | --- | --- |
+| `admitted` | 200 | Ingreso válido. La entrada queda quemada con la hora y el usuario que la escaneó. |
+| `already_used` | 409 | Ya se había escaneado. Incluye la hora y el usuario del primer escaneo. |
+| `wrong_event` | 409 | Es de otra fecha del mismo boliche. No se quema e incluye el evento correcto. |
+| `invalid` | 404 | QR falso, alterado o de otro boliche. |
+
+El escaneo funciona solo con conexión: decide el servidor, así que dos celulares no pueden aceptar el mismo QR. El admin de Django lista las entradas por evento con el filtro de ingreso.
+
+El manejo de pagos tardíos forma parte de la integración con Mercado Pago. Antes de habilitar la compra pública, agregá protección contra reservas automatizadas en el punto de entrada.
 
 Ejecutá las pruebas con `.venv/Scripts/python.exe manage.py test catalog`. Usá un usuario PostgreSQL de desarrollo con permiso `CREATEDB` para que Django pueda crear y eliminar su base de pruebas.
 
@@ -72,6 +108,6 @@ Los archivos seleccionados están disponibles en [la referencia local](reference
 4. Escaneo en puerta con sincronización offline y panel de ventas y asistencia. Si dos dispositivos están desconectados, pueden aceptar el mismo QR antes de sincronizar. El piloto necesita una regla de operación para resolver ese caso.
 5. Caja, RRPP, listas y mesas VIP después del MVP.
 
-Los pasos 1 y 2 están hechos. Lo que falta para el piloto con Infinity está en [pendientes](docs/pendientes.md).
+Los pasos 1 y 2 están hechos. Del paso 3 está la emisión de entradas, y del paso 4 el escaneo en puerta con conexión y la asistencia; faltan Mercado Pago, el modo offline y el panel de ventas. Lo que falta para el piloto con Infinity está en [pendientes](docs/pendientes.md).
 
 El aislamiento de datos por boliche aplica desde la primera entrega. El piloto usa Infinity, y las pruebas deben incluir un segundo boliche para detectar accesos cruzados.
