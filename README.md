@@ -61,6 +61,17 @@ El pedido pasa al estado `paid` y su respuesta incluye `tickets`, una lista vac�
 
 `qr` es el texto que el frontend dibuja como código QR: el id de la entrada más una firma hecha con `DJANGO_SECRET_KEY`. Cambiar esa clave invalida los QR ya emitidos.
 
+## Personal
+
+Todo el personal de los boliches entra con el mismo login. El token es el mismo que usa la portería y el rol de la persona en cada boliche decide qué puede hacer.
+
+| Ruta | Uso |
+| --- | --- |
+| `POST /api/v1/auth/login/` | Recibe `{ username, password }` y devuelve `{ token, expiresIn, user, memberships }`. Sirve cualquier rol (`admin`, `door`, `cashier`) en un boliche activo; sin membresías responde `403` (`no_membership`), también para superusuarios. |
+| `GET /api/v1/auth/me/` | Con `Authorization: Bearer <token>` devuelve `{ user, memberships }` leídos de la base en el momento. Sin token válido, `401`. |
+
+`memberships` es una lista de `{ venue: { slug, name }, role }` solo de boliches activos, ordenada por slug. Los logins `auth` y `door` comparten el límite de intentos por usuario. Las rutas por boliche usan el decorador `venue_staff_view(*roles)` de `catalog/staff_auth.py`: `401` sin token y `404` si el boliche no existe, está inactivo o la persona no tiene uno de esos roles en él.
+
 ## Portería
 
 El personal de puerta entra con su usuario de Django. Necesita una membresía con rol `door` o `admin` en el boliche.
