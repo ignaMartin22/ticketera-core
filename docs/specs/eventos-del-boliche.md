@@ -83,7 +83,7 @@ Las tandas (1ª, 2ª…) son tipos de entrada distintos con su propio precio y c
 
 - Solo se puede eliminar una fecha **sin entradas vendidas**. Con ventas, se pausa la venta.
 - Pide confirmación: la fecha no se puede recuperar.
-- Hoy en el admin de Django solo el superusuario puede borrar. Los pedidos protegen la fecha a nivel base (`PROTECT`): una fecha con pedidos no se borra.
+- En el admin del core el superusuario borra siempre; el administrador del boliche, solo fechas y tipos de entrada sin ventas. Los pedidos protegen la fecha a nivel base (`PROTECT`): una fecha con pedidos no se borra.
 
 ### Listado y resumen
 
@@ -100,8 +100,8 @@ Las tandas (1ª, 2ª…) son tipos de entrada distintos con su propio precio y c
    - `Event.sales_open`: la API pública lo expone y la reserva lo respeta. Responde 409 con un código nuevo, por ejemplo `sales_paused`.
    - Portada de la fecha, guardada como archivo y no como data URL. Requiere decidir dónde se guardan los archivos.
    - `TicketType.kind`: común o VIP.
-2. **Identificadores fijos**: hoy el admin de Django deja cambiar el slug de una fecha o de una entrada ya creada. Tiene que quedar de solo lectura después del alta.
-3. **Reglas de baja**: no eliminar fechas con ventas ni tipos de entrada con ventas. La baja de una fecha sin ventas tiene que estar en la API de gestión, para el administrador del boliche.
+2. **Identificadores fijos**: hecho en el admin del core — el slug del boliche, de la fecha y del tipo de entrada queda de solo lectura después del alta.
+3. **Reglas de baja**: hecho en el admin del core — el administrador del boliche puede borrar fechas sin entradas vendidas y tipos de entrada sin ventas; con ventas no se borran. Falta llevar la baja a la API de gestión, para el administrador del boliche.
 4. **API de gestión** para el dashboard de cada cliente, con autenticación por usuario y limitada a los boliches que administra. Por ejemplo:
 
    | Método | Ruta | Acción |
@@ -114,4 +114,4 @@ Las tandas (1ª, 2ª…) son tipos de entrada distintos con su propio precio y c
 
    Falta decidir cómo se loguea el dueño en el dashboard de su sitio: por ejemplo, el servidor de Next manda email y contraseña al core y recibe un token de ese usuario. Además, el repo del cliente usa su propia credencial ([Clientes](clientes.md)).
 5. **Validaciones del servidor**: que el core aplique las reglas del panel (fecha futura al crear, precio y cupo mayores a 0, al menos una entrada). El panel las valida antes de enviar, pero el servidor tiene que validarlas de nuevo.
-6. **Pruebas** de aislamiento, de baja con y sin ventas, de identificadores fijos y de venta pausada.
+6. **Pruebas**: las del admin del core ya cubren aislamiento, baja con y sin ventas e identificadores fijos. Faltan venta pausada y la API de gestión.

@@ -27,7 +27,7 @@ Venue ─┬─ Membership ── User
 | Nivel | Quién | Dónde | Qué puede hacer |
 | --- | --- | --- | --- |
 | Plataforma | Superusuarios de Django | `/plataforma/` y `/admin/` del core | Todo: crear y pausar boliches, cambiar comisiones, cargar el equipo, cargar fechas y borrar. |
-| Administración del boliche | `Membership` con rol `admin` | Dashboard del repo de su boliche (pendiente: API de gestión) | Fechas y entradas de su boliche. Ver [ABM de eventos](eventos-del-boliche.md). |
+| Administración del boliche | `Membership` con rol `admin` | Dashboard del repo de su boliche (pendiente: API de gestión) | Fechas y entradas de su boliche; borra solo las que no tienen ventas. Ver [ABM de eventos](eventos-del-boliche.md). |
 | Puerta | `Membership` con rol `door` | Pendiente | Reservado para el escáner de puerta. |
 | Caja | `Membership` con rol `cashier` | Pendiente | Reservado para la venta en caja. |
 

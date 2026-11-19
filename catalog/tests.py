@@ -1,5 +1,6 @@
+from django.contrib import admin
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import RequestFactory, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
@@ -25,6 +26,11 @@ class CatalogTests(TestCase):
         TicketType.objects.create(
             event=cls.moon_event, slug="hidden", name="Oculta", price=100, capacity=5, is_active=False,
         )
+        cls.sold_ticket = TicketType.objects.create(
+            event=cls.moon_event, slug="agotada", name="Agotada", price=200, capacity=5,
+            sold=5, is_active=False,
+        )
+        cls.root = get_user_model().objects.create_superuser("root", "root@example.com", "x")
         cls.venue_admin = get_user_model().objects.create_user(username="moon-admin", is_staff=True)
         Membership.objects.create(venue=cls.moon, user=cls.venue_admin, role=Membership.Role.ADMIN)
         Membership.objects.create(venue=cls.other, user=cls.venue_admin, role=Membership.Role.DOOR)
@@ -77,3 +83,40 @@ class CatalogTests(TestCase):
         )
         self.assertIn("event", response.context["adminform"].form.errors)
         self.assertFalse(TicketType.objects.filter(slug="forged").exists())
+
+    @staticmethod
+    def admin_request(user):
+        request = RequestFactory().get("/admin/")
+        request.user = user
+        return request
+
+    def test_admin_slugs_are_readonly_once_created(self):
+        request = self.admin_request(self.venue_admin)
+        event_admin = admin.site._registry[Event]
+        self.assertEqual(event_admin.get_readonly_fields(request), ())
+        self.assertEqual(event_admin.get_readonly_fields(request, self.moon_event), ("venue", "slug"))
+        ticket_admin = admin.site._registry[TicketType]
+        self.assertEqual(ticket_admin.get_readonly_fields(request), ("sold",))
+        self.assertEqual(
+            ticket_admin.get_readonly_fields(request, self.moon_ticket), ("event", "slug", "sold")
+        )
+        venue_admin = admin.site._registry[Venue]
+        self.assertEqual(venue_admin.get_readonly_fields(request), ())
+        self.assertEqual(venue_admin.get_readonly_fields(request, self.moon), ("slug",))
+
+    def test_venue_admin_only_deletes_without_sales(self):
+        request = self.admin_request(self.venue_admin)
+        event_admin = admin.site._registry[Event]
+        ticket_admin = admin.site._registry[TicketType]
+        self.assertTrue(event_admin.has_delete_permission(request, self.draft))
+        self.assertTrue(ticket_admin.has_delete_permission(request, self.moon_ticket))
+        self.assertFalse(event_admin.has_delete_permission(request, self.moon_event))
+        self.assertFalse(ticket_admin.has_delete_permission(request, self.sold_ticket))
+        # Sin ventas pero de otro boliche: el aislamiento manda.
+        self.assertFalse(event_admin.has_delete_permission(request, self.other_event))
+        self.assertFalse(ticket_admin.has_delete_permission(request, self.other_ticket))
+
+    def test_superuser_deletes_even_with_sales(self):
+        request = self.admin_request(self.root)
+        for model, obj in [(Event, self.moon_event), (TicketType, self.sold_ticket)]:
+            self.assertTrue(admin.site._registry[model].has_delete_permission(request, obj))
