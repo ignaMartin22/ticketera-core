@@ -1,0 +1,57 @@
+{% extends "backoffice/venue_base.html" %}
+{% block tab %}
+{% if link %}
+  <section class="card callout">
+    <h2>Link de acceso para {{ link.email }}</h2>
+    <p class="help">Mandáselo por WhatsApp. Sirve para crear la contraseña una sola vez y vence en 3 días.</p>
+    <div class="copy-row">
+      <input type="text" readonly value="{{ link.url }}" id="access-link" aria-label="Link de acceso">
+      <button type="button" class="btn btn-sm" data-copy="access-link">Copiar</button>
+    </div>
+  </section>
+{% endif %}
+<div class="grid-2 align-start">
+  <section class="card">
+    <h2>Equipo</h2>
+    {% if members %}
+      <ul class="members">
+        {% for member in members %}
+          <li>
+            <div>
+              <p><strong>{{ member.user.get_full_name|default:member.user.email }}</strong></p>
+              <p class="help">{{ member.user.email }} · {{ member.get_role_display }}{% if not member.user.has_usable_password %} · sin contraseña{% endif %}</p>
+            </div>
+            <div class="row-actions">
+              <form method="post" action="{% url 'backoffice:member-link' venue.slug member.pk %}">{% csrf_token %}<button type="submit" class="btn btn-ghost btn-sm">Link de acceso</button></form>
+              <form method="post" action="{% url 'backoffice:member-remove' venue.slug member.pk %}">{% csrf_token %}<button type="submit" class="btn btn-ghost btn-sm btn-danger" data-confirm="¿Quitar a {{ member.user.email }} de {{ venue.name }}?">Quitar</button></form>
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted">Nadie tiene acceso todavía.</p>
+    {% endif %}
+  </section>
+  <form method="post" class="card stack">
+    {% csrf_token %}
+    <h2>Dar acceso</h2>
+    <p class="help">Administración carga las fechas y entradas en el catálogo. Puerta y caja quedan listas para sus herramientas.</p>
+    {% include "backoffice/_form_errors.html" %}
+    {% for field in form %}{% include "backoffice/_field.html" %}{% endfor %}
+    <div class="actions"><button type="submit" class="btn btn-primary">Dar acceso</button></div>
+  </form>
+</div>
+{% endblock %}
+{% block tab_scripts %}
+<script>
+  document.addEventListener("click", function (e) {
+    var btn = e.target.closest("[data-copy]");
+    if (!btn) return;
+    var input = document.getElementById(btn.dataset.copy);
+    input.select();
+    var done = function () { btn.textContent = "Copiado"; };
+    if (navigator.clipboard) navigator.clipboard.writeText(input.value).then(done, function () {});
+    else { document.execCommand("copy"); done(); }
+  });
+</script>
+{% endblock %}

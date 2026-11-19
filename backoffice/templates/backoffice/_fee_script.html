@@ -1,0 +1,26 @@
+<script>
+  // Vista previa de la comisión. El cálculo real lo hace el servidor al reservar.
+  (function () {
+    var box = document.querySelector("[data-fee-preview]");
+    if (!box) return;
+    var form = box.closest("form");
+    var money = new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 2 });
+    function rate(name) {
+      var v = parseFloat((form.elements[name].value || "0").replace(",", "."));
+      return isNaN(v) ? 0 : v / 100;
+    }
+    function update() {
+      var price = 10000;
+      var checked = form.querySelector("input[name=fee_mode]:checked");
+      var buyerPays = checked && checked.value === "buyer";
+      var service = buyerPays ? Math.round(price * rate("buyer_fee_percent")) : 0;
+      var commission = Math.round(price * rate("platform_fee_percent") * 100) / 100;
+      box.querySelector("[data-buyer]").textContent = money.format(price + service);
+      box.querySelector("[data-venue]").textContent = money.format(price - commission);
+      box.querySelector("[data-platform]").textContent = money.format(service + commission);
+      form.elements.buyer_fee_percent.closest(".field").classList.toggle("is-off", !buyerPays);
+    }
+    form.addEventListener("input", update);
+    update();
+  })();
+</script>

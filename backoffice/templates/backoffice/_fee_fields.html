@@ -1,0 +1,10 @@
+{% include "backoffice/_form_errors.html" with form=fees %}
+{% for field in fees %}{% include "backoffice/_field.html" %}{% endfor %}
+<div class="fee-preview" data-fee-preview>
+  <p class="help">En una entrada de <strong>$10.000</strong>:</p>
+  <dl class="facts">
+    <div><dt>Paga el comprador</dt><dd data-buyer>—</dd></div>
+    <div><dt>Recibe el boliche</dt><dd data-venue>—</dd></div>
+    <div><dt>Retiene la plataforma</dt><dd data-platform>—</dd></div>
+  </dl>
+</div>

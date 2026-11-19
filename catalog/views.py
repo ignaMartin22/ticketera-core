@@ -125,7 +125,10 @@ def order_input(request):
     if not isinstance(email, str) or len(email) > 254:
         raise ValidationError("invalid_email")
     email = email.strip()
-    validate_email(email)
+    try:
+        validate_email(email)
+    except ValidationError as exc:
+        raise ValidationError("invalid_email") from exc
     name = data.get("name")
     if not isinstance(name, str) or not 1 <= len(" ".join(name.split())) <= 150:
         raise ValidationError("invalid_name")

@@ -1,0 +1,15 @@
+{% extends "backoffice/base.html" %}
+{% block title %}Entrar{% endblock %}
+{% block content %}
+<section class="card narrow">
+  <h1>Entrar al panel</h1>
+  <p class="muted">Solo para el equipo de la plataforma.</p>
+  <form method="post" class="stack">
+    {% csrf_token %}
+    {% include "backoffice/_form_errors.html" %}
+    {% for field in form %}{% include "backoffice/_field.html" %}{% endfor %}
+    <input type="hidden" name="next" value="{{ next }}">
+    <button type="submit" class="btn btn-primary">Entrar</button>
+  </form>
+</section>
+{% endblock %}

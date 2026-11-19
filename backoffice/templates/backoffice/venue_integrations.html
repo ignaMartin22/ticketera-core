@@ -1,0 +1,27 @@
+{% extends "backoffice/venue_base.html" %}
+{% block tab %}
+<ul class="integrations">
+  {% for integration in integrations %}
+    <li class="card stack">
+      <div class="section-head">
+        <h2>{{ integration.get_provider_display }}</h2>
+        <span class="badge{% if integration.status == 'connected' %} badge-ok{% elif integration.status != 'disconnected' %} badge-warn{% endif %}">{{ integration.get_status_display }}</span>
+      </div>
+      {% if integration.provider == "mercadopago" %}
+        <p>Cobra las entradas en la cuenta de Mercado Pago del boliche y retiene la comisión de la plataforma en cada pago.</p>
+      {% elif integration.provider == "whatsapp" %}
+        <p>Manda las entradas y los avisos por WhatsApp. Necesita la aprobación de Meta para WhatsApp Business.</p>
+      {% else %}
+        <p>Manda las entradas por email con el nombre del boliche.</p>
+      {% endif %}
+      {% if integration.account_label %}<p class="help">Cuenta: {{ integration.account_label }}{% if integration.account_id %} ({{ integration.account_id }}){% endif %}</p>{% endif %}
+      {% if integration.connected_at %}<p class="help">Conectada el {{ integration.connected_at|date:"j/n/Y" }}{% if integration.expires_at %} · vence el {{ integration.expires_at|date:"j/n/Y" }}{% endif %}</p>{% endif %}
+      {% if integration.last_error %}<p class="error">{{ integration.last_error }}</p>{% endif %}
+      <div>
+        <button type="button" class="btn btn-sm" disabled>{% if integration.provider == "mercadopago" %}Conectar Mercado Pago{% else %}Conectar{% endif %}</button>
+        <p class="help">Disponible cuando se habilite la integración.</p>
+      </div>
+    </li>
+  {% endfor %}
+</ul>
+{% endblock %}

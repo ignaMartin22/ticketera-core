@@ -1,0 +1,31 @@
+{% load static %}<!doctype html>
+<html lang="es-AR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>{% block title %}Plataforma{% endblock %} · Ticketera</title>
+  <link rel="stylesheet" href="{% static 'backoffice/app.css' %}">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="{% url 'backoffice:venue-list' %}"><span class="brand-mark" aria-hidden="true"></span>Ticketera <span class="muted">Plataforma</span></a>
+    {% if user.is_authenticated %}
+      <form method="post" action="{% url 'backoffice:logout' %}" class="topbar-user">
+        {% csrf_token %}
+        <span class="muted">{{ user.email|default:user.username }}</span>
+        <button type="submit" class="btn btn-ghost btn-sm">Salir</button>
+      </form>
+    {% endif %}
+  </header>
+  <main class="page">
+    {% if messages %}
+      <ul class="messages" role="status">
+        {% for message in messages %}<li class="message message-{{ message.tags }}">{{ message }}</li>{% endfor %}
+      </ul>
+    {% endif %}
+    {% block content %}{% endblock %}
+  </main>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

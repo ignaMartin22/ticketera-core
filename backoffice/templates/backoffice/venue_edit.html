@@ -1,0 +1,9 @@
+{% extends "backoffice/venue_base.html" %}
+{% block tab %}
+<form method="post" class="card stack narrow-form">
+  {% csrf_token %}
+  {% include "backoffice/_form_errors.html" %}
+  {% for field in form %}{% include "backoffice/_field.html" %}{% endfor %}
+  <div class="actions"><button type="submit" class="btn btn-primary">Guardar</button></div>
+</form>
+{% endblock %}

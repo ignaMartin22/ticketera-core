@@ -1,0 +1,41 @@
+{% extends "backoffice/base.html" %}
+{% block title %}{{ venue.name }}{% endblock %}
+{% block content %}
+<a class="back" href="{% url 'backoffice:venue-list' %}">← Boliches</a>
+<div class="page-head" style="--accent: {{ venue.accent }}">
+  <div class="venue-title">
+    <span class="swatch" aria-hidden="true"></span>
+    <div>
+      <h1>{{ venue.name }}</h1>
+      <p class="muted">/{{ venue.slug }} · {{ venue.city }}</p>
+    </div>
+  </div>
+  <form method="post" action="{% url 'backoffice:venue-toggle' venue.slug %}" class="status-toggle">
+    {% csrf_token %}
+    {% if venue.is_active %}
+      <span class="badge badge-ok">Activo</span>
+      <button type="submit" class="btn btn-ghost btn-sm" data-confirm="¿Pausar {{ venue.name }}? Deja de aparecer en TicketJuy y no acepta reservas.">Pausar</button>
+    {% else %}
+      <span class="badge">Pausado</span>
+      <button type="submit" class="btn btn-sm">Activar</button>
+    {% endif %}
+  </form>
+</div>
+<nav class="tabs" aria-label="Secciones del boliche">
+  <a href="{% url 'backoffice:venue-detail' venue.slug %}"{% if tab == "summary" %} aria-current="page"{% endif %}>Resumen</a>
+  <a href="{% url 'backoffice:venue-edit' venue.slug %}"{% if tab == "edit" %} aria-current="page"{% endif %}>Datos</a>
+  <a href="{% url 'backoffice:venue-fees' venue.slug %}"{% if tab == "fees" %} aria-current="page"{% endif %}>Comisión</a>
+  <a href="{% url 'backoffice:venue-team' venue.slug %}"{% if tab == "team" %} aria-current="page"{% endif %}>Equipo</a>
+  <a href="{% url 'backoffice:venue-integrations' venue.slug %}"{% if tab == "integrations" %} aria-current="page"{% endif %}>Conexiones</a>
+</nav>
+{% block tab %}{% endblock %}
+{% endblock %}
+{% block scripts %}
+<script>
+  document.addEventListener("submit", function (e) {
+    var btn = e.submitter;
+    if (btn && btn.dataset.confirm && !window.confirm(btn.dataset.confirm)) e.preventDefault();
+  });
+</script>
+{% block tab_scripts %}{% endblock %}
+{% endblock %}

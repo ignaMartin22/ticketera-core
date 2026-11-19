@@ -1,0 +1,43 @@
+{% extends "backoffice/base.html" %}
+{% load backoffice %}
+{% block title %}Boliches{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Boliches</h1>
+    <p class="muted">Cada boliche tiene su catálogo, su equipo, su comisión y sus conexiones.</p>
+  </div>
+  <a class="btn btn-primary" href="{% url 'backoffice:venue-create' %}">Nuevo boliche</a>
+</div>
+{% if rows %}
+  <ul class="venue-grid">
+    {% for row in rows %}{% with venue=row.venue %}
+      <li>
+        <a class="card venue-card" href="{% url 'backoffice:venue-detail' venue.slug %}" style="--accent: {{ venue.accent }}">
+          <div class="venue-card-head">
+            <span class="swatch" aria-hidden="true"></span>
+            <div>
+              <h2>{{ venue.name }}</h2>
+              <p class="muted">/{{ venue.slug }} · {{ venue.city }}</p>
+            </div>
+            {% if venue.is_active %}<span class="badge badge-ok">Activo</span>{% else %}<span class="badge">Pausado</span>{% endif %}
+          </div>
+          <dl class="facts">
+            <div><dt>Próximas fechas</dt><dd>{{ venue.upcoming }}</dd></div>
+            <div><dt>Equipo</dt><dd>{{ venue.team }}</dd></div>
+            <div><dt>Cargo al comprador</dt><dd>{% if venue.fee_mode == "buyer" %}{{ venue.buyer_fee_rate|percent }}{% else %}No{% endif %}</dd></div>
+            <div><dt>Comisión</dt><dd>{{ venue.platform_fee_rate|percent }}</dd></div>
+            <div><dt>Mercado Pago</dt><dd class="{% if row.mp_ok %}ok{% else %}warn{% endif %}">{{ row.mercadopago }}</dd></div>
+          </dl>
+        </a>
+      </li>
+    {% endwith %}{% endfor %}
+  </ul>
+{% else %}
+  <section class="card empty">
+    <h2>Todavía no hay boliches</h2>
+    <p class="muted">Creá el primero para cargar su catálogo y su equipo.</p>
+    <a class="btn btn-primary" href="{% url 'backoffice:venue-create' %}">Nuevo boliche</a>
+  </section>
+{% endif %}
+{% endblock %}

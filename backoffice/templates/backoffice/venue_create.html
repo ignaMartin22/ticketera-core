@@ -1,0 +1,23 @@
+{% extends "backoffice/base.html" %}
+{% block title %}Nuevo boliche{% endblock %}
+{% block content %}
+<a class="back" href="{% url 'backoffice:venue-list' %}">← Boliches</a>
+<h1>Nuevo boliche</h1>
+<p class="muted">Se crea pausado. Lo activás cuando tenga su equipo, su comisión y Mercado Pago.</p>
+<form method="post" class="grid-2 align-start">
+  {% csrf_token %}
+  <section class="card stack">
+    <h2>Datos y marca</h2>
+    {% include "backoffice/_form_errors.html" %}
+    {% for field in form %}{% include "backoffice/_field.html" %}{% endfor %}
+  </section>
+  <div class="stack">
+    <section class="card stack">
+      <h2>Comisión</h2>
+      {% include "backoffice/_fee_fields.html" %}
+    </section>
+    <div class="actions"><button type="submit" class="btn btn-primary">Crear boliche</button></div>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}{% include "backoffice/_fee_script.html" %}{% endblock %}

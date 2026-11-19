@@ -26,8 +26,18 @@ class Venue(models.Model):
         default="#4fc8ff",
         validators=[RegexValidator(r"^#[0-9a-fA-F]{6}$")],
     )
-    fee_mode = models.CharField(max_length=5, choices=FeeMode, default=FeeMode.VENUE)
-    buyer_fee_rate = models.DecimalField(max_digits=5, decimal_places=4, default=0)
+    fee_mode = models.CharField(
+        max_length=5, choices=FeeMode, default=FeeMode.VENUE,
+        help_text="Quién paga el cargo de servicio. Con «Boliche», el comprador paga solo el precio.",
+    )
+    buyer_fee_rate = models.DecimalField(
+        max_digits=5, decimal_places=4, default=0,
+        help_text="Cargo de servicio que se suma al precio cuando lo paga el comprador (0.1 = 10 %).",
+    )
+    platform_fee_rate = models.DecimalField(
+        max_digits=5, decimal_places=4, default=0,
+        help_text="Comisión que retiene la plataforma sobre el precio de cada entrada (0.05 = 5 %).",
+    )
     is_active = models.BooleanField(default=False)
 
     class Meta:
@@ -37,10 +47,71 @@ class Venue(models.Model):
                 condition=Q(buyer_fee_rate__gte=0, buyer_fee_rate__lte=1),
                 name="venue_buyer_fee_rate_range",
             ),
+            models.CheckConstraint(
+                condition=Q(platform_fee_rate__gte=0, platform_fee_rate__lte=1),
+                name="venue_platform_fee_rate_range",
+            ),
         ]
 
     def __str__(self):
         return self.name
+
+    @property
+    def service_fee_rate(self):
+        """Cargo que se le suma al comprador."""
+        return self.buyer_fee_rate if self.fee_mode == self.FeeMode.BUYER else 0
+
+
+class FeeChange(models.Model):
+    """Historial de comisiones. Cada pedido guarda además los importes con los que se reservó."""
+
+    venue = models.ForeignKey(Venue, on_delete=models.CASCADE, related_name="fee_changes")
+    changed_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
+    changed_at = models.DateTimeField(auto_now_add=True)
+    fee_mode = models.CharField(max_length=5, choices=Venue.FeeMode)
+    buyer_fee_rate = models.DecimalField(max_digits=5, decimal_places=4)
+    platform_fee_rate = models.DecimalField(max_digits=5, decimal_places=4)
+    note = models.CharField(max_length=250, blank=True)
+
+    class Meta:
+        ordering = ["-changed_at", "-pk"]
+
+
+class VenueIntegration(models.Model):
+    """Conexión de un boliche con un servicio externo.
+
+    Los tokens de OAuth se agregan junto con cada integración, cifrados y fuera de este modelo de estado.
+    """
+
+    class Provider(models.TextChoices):
+        MERCADOPAGO = "mercadopago", "Mercado Pago"
+        WHATSAPP = "whatsapp", "WhatsApp"
+        EMAIL = "email", "Email"
+
+    class Status(models.TextChoices):
+        DISCONNECTED = "disconnected", "Sin conectar"
+        CONNECTED = "connected", "Conectada"
+        EXPIRED = "expired", "Vencida"
+        ERROR = "error", "Con error"
+
+    venue = models.ForeignKey(Venue, on_delete=models.CASCADE, related_name="integrations")
+    provider = models.CharField(max_length=20, choices=Provider)
+    status = models.CharField(max_length=12, choices=Status, default=Status.DISCONNECTED)
+    account_id = models.CharField(max_length=100, blank=True, help_text="Identificador de la cuenta en el proveedor.")
+    account_label = models.CharField(max_length=150, blank=True, help_text="Nombre o email de la cuenta vinculada.")
+    connected_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    last_error = models.CharField(max_length=500, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["venue", "provider"]
+        constraints = [
+            models.UniqueConstraint(fields=["venue", "provider"], name="unique_venue_integration"),
+        ]
+
+    def __str__(self):
+        return f"{self.venue} / {self.get_provider_display()}"
 
 
 class Membership(models.Model):
@@ -140,6 +211,10 @@ class OrderItem(models.Model):
     quantity = models.PositiveSmallIntegerField()
     unit_price = models.DecimalField(max_digits=12, decimal_places=2)
     unit_service_fee = models.DecimalField(max_digits=13, decimal_places=2)
+    unit_platform_fee = models.DecimalField(
+        max_digits=13, decimal_places=2, default=0,
+        help_text="Comisión de la plataforma sobre el precio, vigente al reservar.",
+    )
 
     class Meta:
         ordering = ["ticket_type_id"]

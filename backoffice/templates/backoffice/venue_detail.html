@@ -1,0 +1,49 @@
+{% extends "backoffice/venue_base.html" %}
+{% load backoffice %}
+{% block tab %}
+<div class="grid-2">
+  <section class="card">
+    <h2>Para empezar a vender</h2>
+    <ul class="checklist">
+      {% for label, done in checklist %}
+        <li{% if done %} class="done"{% endif %}><span class="check" aria-hidden="true"></span>{{ label }}<span class="sr-only">{% if done %} (listo){% else %} (pendiente){% endif %}</span></li>
+      {% endfor %}
+    </ul>
+  </section>
+  <section class="card">
+    <h2>Números</h2>
+    <dl class="facts">
+      <div><dt>Entradas vendidas</dt><dd>{{ sold }}</dd></div>
+      <div><dt>Reservas vigentes</dt><dd>{{ reserved }}</dd></div>
+      <div><dt>Cargo al comprador</dt><dd>{% if venue.fee_mode == "buyer" %}{{ venue.buyer_fee_rate|percent }}{% else %}No{% endif %}</dd></div>
+      <div><dt>Comisión</dt><dd>{{ venue.platform_fee_rate|percent }}</dd></div>
+    </dl>
+    <p class="help">Administración: {% for m in admins %}{{ m.user.email }}{% if not forloop.last %}, {% endif %}{% empty %}nadie todavía.{% endfor %}</p>
+  </section>
+</div>
+<section class="card">
+  <div class="section-head">
+    <h2>Próximas fechas</h2>
+    <a class="btn btn-ghost btn-sm" href="/admin/catalog/event/?venue__id__exact={{ venue.pk }}">Editar catálogo</a>
+  </div>
+  {% if events %}
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Fecha</th><th>Evento</th><th>Estado</th><th class="num">Vendidas</th></tr></thead>
+        <tbody>
+          {% for event in events %}
+            <tr>
+              <td>{{ event.starts_at|date:"D j/n H:i" }}</td>
+              <td>{{ event.title }}</td>
+              <td>{% if event.is_published %}<span class="badge badge-ok">Publicada</span>{% else %}<span class="badge">Borrador</span>{% endif %}</td>
+              <td class="num">{{ event.sold|default:0 }} / {{ event.capacity|default:0 }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="muted">No hay fechas próximas.</p>
+  {% endif %}
+</section>
+{% endblock %}
