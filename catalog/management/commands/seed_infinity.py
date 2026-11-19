@@ -5,7 +5,7 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
-from catalog.models import Event, TicketType, Venue
+from catalog.models import Event, FeeChange, TicketType, Venue
 
 VENUE = {
     "slug": "infinity",
@@ -76,6 +76,11 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         slug = VENUE["slug"]
         venue, _ = Venue.objects.update_or_create(slug=slug, defaults={k: v for k, v in VENUE.items() if k != "slug"})
+        if not venue.fee_changes.exists():
+            FeeChange.objects.create(
+                venue=venue, fee_mode=venue.fee_mode, buyer_fee_rate=venue.buyer_fee_rate,
+                platform_fee_rate=venue.platform_fee_rate, note="Datos de demostración",
+            )
         today = timezone.localdate()
         for data in EVENTS:
             data = dict(data)

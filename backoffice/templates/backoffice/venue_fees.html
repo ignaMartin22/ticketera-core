@@ -1,0 +1,29 @@
+{% extends "backoffice/venue_base.html" %}
+{% load backoffice %}
+{% block tab %}
+<div class="grid-2 align-start">
+  <form method="post" class="card stack">
+    {% csrf_token %}
+    <h2>Comisión vigente</h2>
+    {% include "backoffice/_fee_fields.html" with fees=form %}
+    <p class="help">El cambio aplica a las reservas nuevas. Los pedidos ya hechos conservan sus importes.</p>
+    <div class="actions"><button type="submit" class="btn btn-primary">Guardar comisión</button></div>
+  </form>
+  <section class="card">
+    <h2>Historial</h2>
+    {% if history %}
+      <ol class="timeline">
+        {% for change in history %}
+          <li>
+            <p><strong>{% if change.fee_mode == "buyer" %}Comprador paga {{ change.buyer_fee_rate|percent }}{% else %}Sin cargo al comprador{% endif %}</strong> · comisión {{ change.platform_fee_rate|percent }}</p>
+            <p class="help">{{ change.changed_at|date:"j/n/Y H:i" }} · {% if change.changed_by %}{{ change.changed_by.email|default:change.changed_by.username }}{% else %}sistema{% endif %}{% if change.note %} · {{ change.note }}{% endif %}</p>
+          </li>
+        {% endfor %}
+      </ol>
+    {% else %}
+      <p class="muted">Sin cambios registrados.</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}
+{% block tab_scripts %}{% include "backoffice/_fee_script.html" %}{% endblock %}

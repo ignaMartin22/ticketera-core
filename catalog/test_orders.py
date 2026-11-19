@@ -81,6 +81,7 @@ class OrderTests(TestCase):
         self.assertEqual(Order.objects.count(), 1)
 
     def test_buyer_contact_is_validated_stored_and_private(self):
+        self.assertEqual(create_order(self.client, uuid4(), email="sin-arroba").json()["error"], "invalid_email")
         self.assertEqual(create_order(self.client, uuid4(), name="  ").json()["error"], "invalid_name")
         self.assertEqual(create_order(self.client, uuid4(), phone="3884123456").json()["error"], "invalid_phone")
         key = uuid4()

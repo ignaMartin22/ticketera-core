@@ -4,7 +4,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from django.db import transaction
 from django.utils import timezone
 
-from .models import Event, Order, OrderItem, TicketType, Venue
+from .models import Event, Order, OrderItem, TicketType
 
 MAX_TICKETS_PER_ORDER = 10
 RESERVATION_DURATION = timedelta(minutes=10)
@@ -53,7 +53,8 @@ def reserve_order(venue_slug, event_slug, buyer, quantities, idempotency_key):
         idempotency_key=idempotency_key,
         expires_at=now + RESERVATION_DURATION,
     )
-    fee_rate = event.venue.buyer_fee_rate if event.venue.fee_mode == Venue.FeeMode.BUYER else Decimal(0)
+    fee_rate = Decimal(event.venue.service_fee_rate)
+    platform_rate = event.venue.platform_fee_rate
     items = [
         OrderItem(
             order=order,
@@ -62,6 +63,7 @@ def reserve_order(venue_slug, event_slug, buyer, quantities, idempotency_key):
             quantity=quantities[ticket.slug],
             unit_price=ticket.price,
             unit_service_fee=(ticket.price * fee_rate).quantize(Decimal("1"), rounding=ROUND_HALF_UP),
+            unit_platform_fee=(ticket.price * platform_rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
         )
         for ticket in ticket_types
     ]

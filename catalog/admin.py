@@ -41,6 +41,8 @@ class VenueCatalogAdmin(admin.ModelAdmin):
 @admin.register(Event)
 class EventAdmin(VenueCatalogAdmin):
     list_display = ["title", "venue", "starts_at", "is_published"]
+    # Solo ofrece los boliches que el usuario ya ve en la lista.
+    list_filter = [("venue", admin.RelatedOnlyFieldListFilter)]
     list_select_related = ["venue"]
 
     def venue_id(self, obj):
