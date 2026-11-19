@@ -13,6 +13,7 @@ SECRET_KEY = (
     else os.environ["DJANGO_SECRET_KEY"]
 )
 ALLOWED_HOSTS = os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
+ORDERS_RATE_LIMIT = int(os.environ.get("ORDERS_RATE_LIMIT", 20))  # intentos de pedido por hora e IP
 ROOT_URLCONF = "ticketera.urls"
 WSGI_APPLICATION = "ticketera.wsgi.application"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

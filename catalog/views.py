@@ -2,6 +2,8 @@ import json
 import re
 from uuid import UUID
 
+from django.conf import settings
+from django.core.cache import cache
 from django.core.exceptions import RequestDataTooBig, ValidationError
 from django.core.validators import validate_email, validate_slug
 from django.db.models import Prefetch
@@ -157,10 +159,24 @@ def order_input(request):
     return {"email": email, "name": name, "phone": phone}, quantities, key
 
 
+def order_rate_limited(request):
+    # REMOTE_ADDR y no X-Forwarded-For: el cliente puede falsificar ese encabezado.
+    # Solo es confiable detrás de un proxy que lo sobrescriba (pendiente para producción).
+    key = f"order-rl:{request.META.get('REMOTE_ADDR', '')}"
+    if cache.add(key, 1, timeout=3600):
+        return False
+    try:
+        return cache.incr(key) > settings.ORDERS_RATE_LIMIT
+    except ValueError:
+        return False  # la clave venció justo entre el add y el incr
+
+
 @csrf_exempt  # The endpoint accepts only JSON and uses no session credentials.
 @require_POST
 @never_cache
 def order_create(request, venue_slug, event_slug):
+    if order_rate_limited(request):
+        return JsonResponse({"error": "rate_limited"}, status=429)
     if request.content_type != "application/json":
         return JsonResponse({"error": "expected_json"}, status=415)
     try:
