@@ -19,6 +19,10 @@ class CatalogTests(TestCase):
         cls.moon_ticket = TicketType.objects.create(
             event=cls.moon_event, slug="general", name="General Moon", price="15000.50", capacity=100,
         )
+        TicketType.objects.create(
+            event=cls.moon_event, slug="vip", name="VIP Moon", price=30000, capacity=20,
+            kind=TicketType.Kind.VIP,
+        )
         cls.other_ticket = TicketType.objects.create(
             event=cls.other_event, slug="general", name="General Otro", price=10000, capacity=10,
         )
@@ -40,7 +44,9 @@ class CatalogTests(TestCase):
         self.assertEqual([venue["slug"] for venue in venues], ["moon", "other"])
         events = self.client.get(reverse("event-list", args=["moon"])).json()["events"]
         self.assertEqual([event["title"] for event in events], ["Moon"])
-        self.assertEqual([ticket["id"] for ticket in events[0]["ticketTypes"]], ["general"])
+        self.assertIs(events[0]["salesOpen"], True)
+        self.assertEqual([ticket["id"] for ticket in events[0]["ticketTypes"]], ["general", "vip"])
+        self.assertEqual([ticket["kind"] for ticket in events[0]["ticketTypes"]], ["common", "vip"])
         self.assertEqual(events[0]["ticketTypes"][0]["price"], 15000.50)
         other = self.client.get(reverse("event-detail", args=["other", "shared"])).json()
         self.assertEqual(other["event"]["title"], "Otro")

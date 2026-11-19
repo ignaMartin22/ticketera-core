@@ -35,7 +35,7 @@ Lo que carga el dueño en el dashboard de TicketJuy **no llega** al catálogo p�
 | Edad mínima | `Event.age_limit` | De 0 a 99, por defecto 18 |
 | Dress code | `Event.dress_code` | Opcional |
 | Portada | **Falta** | Foto propia de la fecha. El panel la achica en el navegador a 1600 px de lado mayor, en JPEG |
-| Venta abierta | **Falta** | Si está en no, la fecha se ve pero no se venden entradas |
+| Venta abierta | `Event.sales_open` | Si está en no, la fecha se ve pero no se venden entradas |
 | Publicada | `Event.is_published` | Si está en no, la fecha no se ve. El panel de TicketJuy todavía no la muestra |
 
 ### Fecha de la noche
@@ -47,7 +47,7 @@ El dueño piensa en "la noche del viernes" aunque la fiesta empiece el sábado a
 | Campo | En el core | Reglas |
 | --- | --- | --- |
 | Identificador | `TicketType.slug` | Se genera al crear (`general-1`, `vip-2`) y no cambia. Lo usan los pedidos |
-| Tipo | **Falta** | Común o VIP. El panel agrupa las entradas y los gráficos por tipo |
+| Tipo | `TicketType.kind` | Común o VIP. El panel agrupa las entradas y los gráficos por tipo |
 | Nombre | `TicketType.name` | Obligatorio, por ejemplo "Anticipada, 2ª tanda" |
 | Qué incluye | `TicketType.description` | Opcional. Por defecto "Ingreso general." o "Fila VIP en la puerta y acceso al sector VIP." |
 | Precio | `TicketType.price` | Mayor a 0. El panel lo pide en pesos enteros, el core acepta centavos |
@@ -75,8 +75,8 @@ Las tandas (1ª, 2ª…) son tipos de entrada distintos con su propio precio y c
 
 ### Pausar y reanudar la venta
 
-- Disponible en fechas que no pasaron.
-- Con la venta pausada, la fecha sigue visible pero no acepta reservas.
+- Disponible en fechas que no pasaron. El admin del core no lo valida: `sales_open` queda editable en cualquier fecha.
+- Con la venta pausada, la fecha sigue visible pero no acepta reservas: la API responde 409 `sales_paused`.
 - No afecta los pedidos ya reservados o pagados.
 
 ### Baja
@@ -97,9 +97,7 @@ Las tandas (1ª, 2ª…) son tipos de entrada distintos con su propio precio y c
 ## Lo que falta en el core
 
 1. **Campos nuevos**:
-   - `Event.sales_open`: la API pública lo expone y la reserva lo respeta. Responde 409 con un código nuevo, por ejemplo `sales_paused`.
    - Portada de la fecha, guardada como archivo y no como data URL. Requiere decidir dónde se guardan los archivos.
-   - `TicketType.kind`: común o VIP.
 2. **Identificadores fijos**: hoy el admin de Django deja cambiar el slug de una fecha o de una entrada ya creada. Tiene que quedar de solo lectura después del alta.
 3. **Reglas de baja**: no eliminar fechas con ventas ni tipos de entrada con ventas. La baja de una fecha sin ventas tiene que estar en la API de gestión, para el administrador del boliche.
 4. **API de gestión** para el dashboard de cada cliente, con autenticación por usuario y limitada a los boliches que administra. Por ejemplo:
@@ -114,4 +112,4 @@ Las tandas (1ª, 2ª…) son tipos de entrada distintos con su propio precio y c
 
    Falta decidir cómo se loguea el dueño en el dashboard de su sitio: por ejemplo, el servidor de Next manda email y contraseña al core y recibe un token de ese usuario. Además, el repo del cliente usa su propia credencial ([Clientes](clientes.md)).
 5. **Validaciones del servidor**: que el core aplique las reglas del panel (fecha futura al crear, precio y cupo mayores a 0, al menos una entrada). El panel las valida antes de enviar, pero el servidor tiene que validarlas de nuevo.
-6. **Pruebas** de aislamiento, de baja con y sin ventas, de identificadores fijos y de venta pausada.
+6. **Pruebas** de aislamiento, de baja con y sin ventas y de identificadores fijos.

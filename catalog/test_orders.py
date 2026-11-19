@@ -92,6 +92,23 @@ class OrderTests(TestCase):
         self.assertEqual(create_order(self.client, key, name="Juan Pérez").status_code, 200)
         self.assertEqual(create_order(self.client, key, phone="+5493884000000").status_code, 409)
 
+    def test_sales_paused_event_rejects_new_reservations(self):
+        key = uuid4()
+        self.assertEqual(create_order(self.client, key, quantity=1).status_code, 201)
+        Event.objects.filter(venue__slug="moon").update(sales_open=False)
+
+        paused = create_order(self.client, uuid4())
+        self.assertEqual(paused.status_code, 409)
+        self.assertEqual(paused.json()["error"], "sales_paused")
+        # El reintento de una reserva hecha sigue devolviendo el pedido.
+        self.assertEqual(create_order(self.client, key, quantity=1).status_code, 200)
+        event = self.client.get(reverse("event-detail", args=["moon", "fecha"])).json()["event"]
+        self.assertIs(event["salesOpen"], False)
+        self.assertEqual(event["ticketTypes"][0]["available"], 1)
+
+        Event.objects.filter(venue__slug="moon").update(sales_open=True)
+        self.assertEqual(create_order(self.client, uuid4(), quantity=1).status_code, 201)
+
     def test_orders_are_scoped_to_venue_and_event(self):
         key = uuid4()
         self.assertEqual(create_order(self.client, key, ticket_type="other-general").status_code, 409)

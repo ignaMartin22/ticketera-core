@@ -13,7 +13,8 @@ API pública que consume el repo de cada cliente (TicketJuy para Infinity) desde
 - **Debe:** solo se exponen boliches activos, fechas publicadas y tipos de entrada activos. Cualquier otra cosa da 404.
 - Campos vacíos del boliche (`tagline`, `logo`, `cover`, `flyerBackdrop`, `mapsUrl`) llegan como `null`. `dressCode` también.
 - `lineup` es una lista: un artista por línea del campo del admin.
-- Cada tipo de entrada trae `price` (número en pesos), `capacity`, `sold` y `available`.
+- La fecha trae `salesOpen`: en `false`, la fecha se sigue mostrando pero no acepta reservas.
+- Cada tipo de entrada trae `kind` (`common` o `vip`), `price` (número en pesos), `capacity`, `sold` y `available`.
 - **Debe:** `available = capacity − sold − reservas vigentes`, nunca menos de 0.
 - El boliche trae `feeMode` y `buyerFeeRate` para calcular el precio final. Ver [Comisiones](comisiones.md).
 
@@ -57,6 +58,7 @@ API pública que consume el repo de cada cliente (TicketJuy para Infinity) desde
 | 200 | Reintento con la misma clave y el mismo contenido: devuelve el pedido original, aunque haya vencido |
 | 404 `event_unavailable` | El boliche está pausado o la fecha no existe o no está publicada |
 | 409 `idempotency_key_reused` | La misma clave con otro comprador o con otro carrito |
+| 409 `sales_paused` | La fecha tiene la venta pausada. No afecta el reintento de una reserva ya hecha |
 | 409 `ticket_type_unavailable` | Un tipo de entrada no existe en esa fecha o está inactivo |
 | 409 `insufficient_capacity` | No alcanza el cupo |
 
