@@ -1,5 +1,7 @@
 """Única puerta de salida hacia Mercado Pago (SDK oficial). Sin lógica de negocio."""
 
+import warnings
+
 import requests
 from django.conf import settings
 from mercadopago import SDK
@@ -62,3 +64,13 @@ def refresh_tokens(refresh_token):
         "refresh_token": refresh_token,
     }
     return _call(_oauth().refresh, body)
+
+
+def create_preference(access_token, body):
+    """Crea una preferencia de Checkout Pro con el access token del boliche."""
+    options = RequestOptions(connection_timeout=TIMEOUT_SECONDS, max_retries=0)
+    preference = SDK(access_token, request_options=options).preference()
+    with warnings.catch_warnings():
+        # El SDK avisa que notification_url está en desuso; lo usamos igual a propósito.
+        warnings.simplefilter("ignore", DeprecationWarning)
+        return _call(preference.create, body)

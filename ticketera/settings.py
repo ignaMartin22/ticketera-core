@@ -78,3 +78,5 @@ MP_REDIRECT_URI = os.environ.get("MP_REDIRECT_URI", "")
 MP_TOKEN_ENCRYPTION_KEY = os.environ.get("MP_TOKEN_ENCRYPTION_KEY", "")
 MP_CONNECT_RETURN_URL = os.environ.get("MP_CONNECT_RETURN_URL", "/")
 MP_TEST_TOKENS = os.environ.get("MP_TEST_TOKENS") == "1"
+PUBLIC_API_URL = os.environ.get("PUBLIC_API_URL", "").rstrip("/")
+FRONT_BASE_URL = os.environ.get("FRONT_BASE_URL", "").rstrip("/")
