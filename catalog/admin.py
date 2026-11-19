@@ -2,7 +2,7 @@ from django import forms
 from django.contrib import admin, messages
 from django.utils import timezone
 
-from .models import Event, Membership, Order, TicketType, Venue
+from .models import Event, Membership, Order, Ticket, TicketType, Venue
 from .orders import OrderConflict
 from .tickets import issue_tickets
 
@@ -146,3 +146,54 @@ class OrderAdmin(admin.ModelAdmin):
                 issued += 1
         if issued:
             self.message_user(request, f"Entradas emitidas en {issued} pedido(s).", level=messages.SUCCESS)
+
+
+class AttendedFilter(admin.SimpleListFilter):
+    title = "ingresó"
+    parameter_name = "attended"
+
+    def lookups(self, request, model_admin):
+        return [("yes", "Sí"), ("no", "No")]
+
+    def queryset(self, request, queryset):
+        if self.value() == "yes":
+            return queryset.filter(used_at__isnull=False)
+        if self.value() == "no":
+            return queryset.filter(used_at__isnull=True)
+        return queryset
+
+
+@admin.register(Ticket)
+class TicketAdmin(admin.ModelAdmin):
+    list_display = ["event", "holder", "ticket_type", "attended", "used_at", "used_by"]
+    list_select_related = ["event", "order", "ticket_type", "used_by"]
+    list_filter = ["event", AttendedFilter]
+    actions = None
+
+    def has_module_permission(self, request):
+        return managed_venues(request.user).exists()
+
+    def has_view_permission(self, request, obj=None):
+        if obj is None:
+            return self.has_module_permission(request)
+        return managed_venues(request.user).filter(pk=obj.event.venue_id).exists()
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).filter(event__venue__in=managed_venues(request.user))
+
+    @admin.display(description="Titular", ordering="order__buyer_name")
+    def holder(self, obj):
+        return obj.order.buyer_name
+
+    @admin.display(description="Ingresó", boolean=True, ordering="used_at")
+    def attended(self, obj):
+        return obj.used_at is not None

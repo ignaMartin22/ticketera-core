@@ -6,6 +6,7 @@ from functools import wraps
 from django.contrib.auth import authenticate, get_user_model
 from django.core import signing
 from django.core.exceptions import RequestDataTooBig
+from django.db.models import Count, Q
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.cache import never_cache
@@ -154,6 +155,55 @@ def scan(request, venue, user, event_slug):
         return JsonResponse({"result": "admitted", "ticket": ticket_data(ticket)})
     ticket = Ticket.objects.select_related("ticket_type", "order", "used_by").get(pk=ticket.pk)
     return JsonResponse(
-        {"result": "already_used", "ticket": {**ticket_data(ticket), "usedBy": ticket.used_by.get_username()}},
+        {"result": "already_used", "ticket": {**ticket_data(ticket), "usedBy": ticket.used_by.get_username() if ticket.used_by else None}},
         status=409,
     )
+
+
+@require_safe
+@never_cache
+@door_venue_view
+def attendance(request, venue, user, event_slug):
+    event = Event.objects.filter(venue=venue, slug=event_slug, is_published=True).first()
+    if event is None:
+        return error("not_found", 404)
+    tickets = Ticket.objects.filter(event=event)
+    admitted_count = Count("pk", filter=Q(used_at__isnull=False))
+    totals = tickets.aggregate(issued=Count("pk"), admitted=admitted_count)
+    types = (
+        tickets.values("ticket_type__pk", "ticket_type__slug", "ticket_type__name")
+        .annotate(issued=Count("pk"), admitted=admitted_count)
+        .order_by("ticket_type__pk")
+    )
+    admitted = (
+        tickets.filter(used_at__isnull=False)
+        .select_related("ticket_type", "order", "used_by")
+        .order_by("-used_at", "pk")
+    )
+    pending = (
+        tickets.filter(used_at__isnull=True)
+        .select_related("ticket_type", "order")
+        .order_by("created_at", "pk")
+    )
+    return JsonResponse({
+        "event": event_summary(event),
+        "issued": totals["issued"],
+        "admitted": totals["admitted"],
+        "ticketTypes": [
+            {
+                "id": row["ticket_type__slug"], "name": row["ticket_type__name"],
+                "issued": row["issued"], "admitted": row["admitted"],
+            }
+            for row in types
+        ],
+        "tickets": [
+            {
+                "id": str(ticket.pk),
+                "holderName": ticket.order.buyer_name,
+                "ticketType": ticket.ticket_type.name,
+                "usedAt": ticket.used_at.isoformat() if ticket.used_at else None,
+                "usedBy": ticket.used_by.get_username() if ticket.used_by else None,
+            }
+            for ticket in [*admitted, *pending]
+        ],
+    })
