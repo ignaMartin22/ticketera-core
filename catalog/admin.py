@@ -18,6 +18,8 @@ def managed_venues(user):
         return Venue.objects.none()
     if user.is_superuser:
         return Venue.objects.all()
+    if not user.is_authenticated:
+        return Venue.objects.none()
     return Venue.objects.filter(memberships__user=user, memberships__role=Membership.Role.ADMIN)
 
 
