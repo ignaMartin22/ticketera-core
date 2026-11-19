@@ -12,6 +12,8 @@ admin.site.register(Membership)
 
 
 def managed_venues(user):
+    if not user.is_authenticated:
+        return Venue.objects.none()
     if user.is_superuser:
         return Venue.objects.all()
     return Venue.objects.filter(memberships__user=user, memberships__role=Membership.Role.ADMIN)
