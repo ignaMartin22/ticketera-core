@@ -1,4 +1,6 @@
+from django import forms
 from django.contrib import admin
+from django.utils import timezone
 
 from .models import Event, Membership, TicketType, Venue
 
@@ -56,8 +58,21 @@ class EventAdmin(VenueCatalogAdmin):
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
+class TicketTypeAdminForm(forms.ModelForm):
+    def clean_capacity(self):
+        capacity = self.cleaned_data["capacity"]
+        if self.instance.pk:
+            # Admin processes changes in a transaction. Lock the same row as reserve_order.
+            ticket = TicketType.objects.select_for_update().get(pk=self.instance.pk)
+            stock = TicketType.objects.with_reserved(timezone.now()).get(pk=ticket.pk)
+            if capacity < stock.sold + stock.reserved:
+                raise forms.ValidationError("El cupo debe cubrir las entradas vendidas y reservadas.")
+        return capacity
+
+
 @admin.register(TicketType)
 class TicketTypeAdmin(VenueCatalogAdmin):
+    form = TicketTypeAdminForm
     list_display = ["name", "event", "price", "capacity", "sold", "is_active"]
     list_select_related = ["event", "event__venue"]
 
