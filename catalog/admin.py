@@ -10,6 +10,8 @@ admin.site.register(Membership)
 
 
 def managed_venues(user):
+    # Solo el equipo de la plataforma entra al /admin/. Si alguna vez un usuario de staff
+    # tiene membresías, el catálogo igual queda limitado a sus boliches.
     if user.is_superuser:
         return Venue.objects.all()
     return Venue.objects.filter(memberships__user=user, memberships__role=Membership.Role.ADMIN)

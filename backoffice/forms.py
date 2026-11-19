@@ -29,9 +29,9 @@ class VenueForm(forms.ModelForm):
         help_texts = {
             "instagram": "Usuario sin @.",
             "tagline": "Aparece debajo del nombre, por ejemplo «Noches infinitas».",
-            "logo": "Ruta del archivo en TicketJuy, por ejemplo /brand/infinity/infinity-logo.svg.",
-            "cover": "Ruta del archivo en TicketJuy.",
-            "flyer_backdrop": "Ruta del archivo en TicketJuy.",
+            "logo": "Ruta del archivo en el frontend del boliche, por ejemplo /brand/infinity/infinity-logo.svg.",
+            "cover": "Ruta del archivo en el frontend del boliche.",
+            "flyer_backdrop": "Ruta del archivo en el frontend del boliche.",
         }
         widgets = {"accent": forms.TextInput(attrs={"type": "color"})}
 
@@ -45,7 +45,7 @@ class VenueCreateForm(VenueForm):
         labels = {**VenueForm.Meta.labels, "slug": "Identificador"}
         help_texts = {
             **VenueForm.Meta.help_texts,
-            "slug": "Va en la URL de TicketJuy (/infinity). Minúsculas, números y guiones. No se puede cambiar después.",
+            "slug": "Identifica al boliche en la API (/api/v1/venues/infinity/). Minúsculas, números y guiones. No se puede cambiar después.",
         }
 
     def clean_slug(self):
@@ -118,7 +118,10 @@ class MemberForm(forms.Form):
 
     @transaction.atomic
     def save(self, venue):
-        """Crea el usuario si no existe y le asigna el rol. Devuelve (membresía, usuario nuevo)."""
+        """Crea el usuario si no existe y le asigna el rol. Devuelve (membresía, usuario nuevo).
+
+        El usuario no entra al core: va a usar el dashboard del repo de su boliche.
+        """
         User = get_user_model()
         email = self.cleaned_data["email"].strip().lower()
         user = User.objects.filter(email__iexact=email).first() or User.objects.filter(username__iexact=email).first()
@@ -130,15 +133,5 @@ class MemberForm(forms.Form):
         membership, _ = Membership.objects.update_or_create(
             venue=venue, user=user, defaults={"role": self.cleaned_data["role"]},
         )
-        sync_staff(user)
         return membership, created
 
-
-def sync_staff(user):
-    """Solo los administradores de un boliche entran al /admin de Django para cargar su catálogo."""
-    if user.is_superuser:
-        return
-    is_staff = user.membership_set.filter(role=Membership.Role.ADMIN).exists()
-    if user.is_staff != is_staff:
-        user.is_staff = is_staff
-        user.save(update_fields=["is_staff"])

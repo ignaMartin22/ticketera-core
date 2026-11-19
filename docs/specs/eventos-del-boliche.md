@@ -1,23 +1,24 @@
 # ABM de eventos del boliche
 
-Lo que puede hacer el equipo de administración de un boliche con sus fechas y entradas. Se toma como referencia el panel `/admin` de TicketJuy, que el dueño de Infinity ya usa en modo demo.
+Lo que puede hacer el equipo de administración de un boliche con sus fechas y entradas, desde el dashboard del repo de su boliche ([Clientes](clientes.md)). Se toma como referencia el dashboard `/admin` de TicketJuy, el repo de Infinity, que el dueño ya usa en modo demo.
 
 ## Estado actual
 
 Hoy hay dos implementaciones que no están conectadas:
 
-| | Panel de TicketJuy (`/admin`) | Admin de Django del core (`/admin/`) |
+| | Dashboard de TicketJuy (`/admin`) | Admin de Django del core (`/admin/`) |
 | --- | --- | --- |
+| Quién lo usa | El dueño de Infinity | Solo el equipo de la plataforma |
 | Dónde guarda | `localStorage` del navegador (modo demo) | La base del core |
-| Boliche | Fijo en `infinity` | Los que administra el usuario |
 | Uso | Pensado para el dueño, en el celular | Formularios genéricos de Django |
-| Ingreso | Sin login | Usuario y contraseña del core |
+| Ingreso | Sin login | Superusuario del core |
 
-Lo que carga el dueño en el panel de TicketJuy **no llega** al catálogo público. Para el piloto, las fechas reales se cargan en el admin de Django. El objetivo es que el panel de TicketJuy use una API del core y que el admin de Django quede para soporte.
+Lo que carga el dueño en el dashboard de TicketJuy **no llega** al catálogo público. Hasta conectar la API de gestión, las fechas reales de Infinity las carga el equipo de la plataforma desde el admin del core. El objetivo es que cada dashboard de cliente use la API de gestión y que el admin de Django quede para soporte.
 
 ## Quién puede
 
-- **Debe:** solo los usuarios con membresía `admin` en el boliche, y los superusuarios. Ver [Multi-boliche](multi-boliche.md).
+- Los usuarios con membresía `admin` en el boliche, desde el dashboard de su sitio. Ver [Multi-boliche](multi-boliche.md).
+- El equipo de la plataforma, desde el admin del core.
 - Puerta y caja no editan el catálogo.
 - Un administrador nunca ve ni toca fechas de otro boliche.
 
@@ -100,8 +101,8 @@ Las tandas (1ª, 2ª…) son tipos de entrada distintos con su propio precio y c
    - Portada de la fecha, guardada como archivo y no como data URL. Requiere decidir dónde se guardan los archivos.
    - `TicketType.kind`: común o VIP.
 2. **Identificadores fijos**: hoy el admin de Django deja cambiar el slug de una fecha o de una entrada ya creada. Tiene que quedar de solo lectura después del alta.
-3. **Reglas de baja**: no eliminar fechas con ventas ni tipos de entrada con ventas. La baja de una fecha sin ventas debe estar disponible para el administrador del boliche, no solo para el superusuario.
-4. **API de gestión** para el panel de TicketJuy, con autenticación por usuario y limitada a los boliches que administra. Por ejemplo:
+3. **Reglas de baja**: no eliminar fechas con ventas ni tipos de entrada con ventas. La baja de una fecha sin ventas tiene que estar en la API de gestión, para el administrador del boliche.
+4. **API de gestión** para el dashboard de cada cliente, con autenticación por usuario y limitada a los boliches que administra. Por ejemplo:
 
    | Método | Ruta | Acción |
    | --- | --- | --- |
@@ -111,6 +112,6 @@ Las tandas (1ª, 2ª…) son tipos de entrada distintos con su propio precio y c
    | PATCH | `/api/v1/manage/venues/<boliche>/events/<evento>/` | Edición, incluido pausar o reanudar la venta |
    | DELETE | `/api/v1/manage/venues/<boliche>/events/<evento>/` | Baja, solo sin ventas |
 
-   Falta decidir cómo se loguea el dueño en TicketJuy contra el core: sesión del core o token por usuario, siempre desde el servidor de Next.
+   Falta decidir cómo se loguea el dueño en el dashboard de su sitio: por ejemplo, el servidor de Next manda email y contraseña al core y recibe un token de ese usuario. Además, el repo del cliente usa su propia credencial ([Clientes](clientes.md)).
 5. **Validaciones del servidor**: que el core aplique las reglas del panel (fecha futura al crear, precio y cupo mayores a 0, al menos una entrada). El panel las valida antes de enviar, pero el servidor tiene que validarlas de nuevo.
 6. **Pruebas** de aislamiento, de baja con y sin ventas, de identificadores fijos y de venta pausada.

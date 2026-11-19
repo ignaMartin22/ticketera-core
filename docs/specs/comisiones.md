@@ -41,7 +41,7 @@ Ejemplo con P = $10.000, comprador paga 10 % y comisión 5 %: el comprador paga 
 
 ## API pública
 
-La API expone `feeMode` y `buyerFeeRate` en cada boliche para que TicketJuy muestre el precio final. `platform_fee_rate` no se expone.
+La API expone `feeMode` y `buyerFeeRate` en cada boliche para que el sitio del boliche muestre el precio final. `platform_fee_rate` no se expone.
 
 ## Pendiente: Mercado Pago
 

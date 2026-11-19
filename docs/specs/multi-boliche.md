@@ -11,7 +11,7 @@ Venue ─┬─ Membership ── User
        └─ VenueIntegration
 ```
 
-- `Venue.slug` identifica al boliche en la API y en las URLs de TicketJuy (`/infinity`). Es único y no se cambia después del alta.
+- `Venue.slug` identifica al boliche en la API (`/api/v1/venues/infinity/`) y en la configuración del repo del cliente. Es único y no se cambia después del alta.
 - Un `Event` pertenece a un boliche. Su `slug` es único dentro del boliche: dos boliches pueden tener una fecha `fin-de-ano`.
 - Un `TicketType` pertenece a un evento. Su `slug` es único dentro del evento.
 - Un `Order` pertenece a un evento y, por lo tanto, a un boliche.
@@ -26,17 +26,18 @@ Venue ─┬─ Membership ── User
 
 | Nivel | Quién | Dónde | Qué puede hacer |
 | --- | --- | --- | --- |
-| Plataforma | Superusuarios de Django | `/plataforma/` y `/admin/` | Todo: crear y pausar boliches, cambiar comisiones, dar acceso y borrar. |
-| Administración del boliche | `Membership` con rol `admin` | `/admin/` | Ver, crear y editar eventos y tipos de entrada **de sus boliches**. No puede borrar. |
+| Plataforma | Superusuarios de Django | `/plataforma/` y `/admin/` del core | Todo: crear y pausar boliches, cambiar comisiones, cargar el equipo, cargar fechas y borrar. |
+| Administración del boliche | `Membership` con rol `admin` | Dashboard del repo de su boliche (pendiente: API de gestión) | Fechas y entradas de su boliche. Ver [ABM de eventos](eventos-del-boliche.md). |
 | Puerta | `Membership` con rol `door` | Pendiente | Reservado para el escáner de puerta. |
 | Caja | `Membership` con rol `cashier` | Pendiente | Reservado para la venta en caja. |
 
-- Un usuario puede tener una membresía por boliche, con un rol en cada uno.
-- `is_staff` se sincroniza solo: es `true` mientras el usuario sea administrador de al menos un boliche (o sea superusuario). Sin `is_staff`, Django no lo deja entrar a `/admin/`.
+- **El core es solo de la plataforma.** La gente de los boliches nunca entra a `/plataforma/` ni al `/admin/` del core: trabaja desde el dashboard del repo de su boliche. Ver [Clientes](clientes.md).
+- Un usuario puede tener una membresía por boliche, con un rol en cada uno. La membresía dice qué boliche puede tocar desde la API de gestión.
+- **Debe:** cargar a alguien en el equipo de un boliche no le da `is_staff`. La migración `0005` se lo quitó a los miembros que lo tenían.
 
 ## Reglas de aislamiento
 
-- **Debe:** el `/admin/` de un administrador de boliche lista, abre y edita solo eventos y tipos de entrada de los boliches que administra. Abrir uno ajeno por URL redirige al índice.
+- **Debe:** si un usuario de staff que no es superusuario tiene membresías, el `/admin/` igual le muestra solo eventos y tipos de entrada de sus boliches. Abrir uno ajeno por URL redirige al índice. Es una defensa extra: en la operación normal solo entran superusuarios.
 - **Debe:** al crear un evento o tipo de entrada, solo se pueden elegir boliches o eventos propios. Un formulario forjado con un evento ajeno se rechaza.
 - El filtro por boliche del listado de eventos ofrece solo los boliches que el usuario ya ve.
 - **Debe:** la API pública resuelve siempre `/<boliche>/<evento>/`. El mismo slug de evento en otro boliche es otra fecha.
@@ -47,4 +48,4 @@ Venue ─┬─ Membership ── User
 
 - Admin de pedidos limitado por boliche, sin exponer datos de compradores de otros boliches.
 - Herramientas para los roles de puerta y caja.
-- Si un boliche tiene su propio dominio o frontend: resolver el boliche por dominio o con claves de API por cliente. Hoy hay un solo frontend, TicketJuy, con todos los boliches bajo `/<boliche>`.
+- Credenciales de API por repo de cliente, limitadas a su boliche. Ver [Clientes](clientes.md).
