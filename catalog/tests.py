@@ -77,3 +77,7 @@ class CatalogTests(TestCase):
         )
         self.assertIn("event", response.context["adminform"].form.errors)
         self.assertFalse(TicketType.objects.filter(slug="forged").exists())
+
+    def test_admin_login_page_renders_for_anonymous(self):
+        response = self.client.get(reverse("admin:login"))
+        self.assertEqual(response.status_code, 200)
