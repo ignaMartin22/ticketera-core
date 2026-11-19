@@ -86,4 +86,5 @@ API pública que consume el repo de cada cliente (TicketJuy para Infinity) desde
 ## Pendiente
 
 - Reembolsos. Hoy un pago que llega con la reserva vencida y sin cupo (`no_capacity`), con otro monto (`mismatch`) o repetido (`duplicate`) queda marcado para que la plataforma lo revise.
-- Protección contra reservas automatizadas (captcha y límite por IP).
+- Protección contra reservas automatizadas (captcha y límite de intentos).
+  - La IP que ve el core (`REMOTE_ADDR`) es la del servidor del repo del cliente, no la del comprador. El límite tiene que usar la IP del comprador, reenviada por el front y válida solo con la credencial del cliente, o claves como el email o el teléfono. Ver [Pendientes](../pendientes.md), ítem 5.

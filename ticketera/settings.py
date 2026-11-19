@@ -13,6 +13,11 @@ SECRET_KEY = (
     else os.environ["DJANGO_SECRET_KEY"]
 )
 ALLOWED_HOSTS = os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
+CSRF_TRUSTED_ORIGINS = [
+    origin
+    for origin in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",")
+    if origin
+]
 ROOT_URLCONF = "ticketera.urls"
 WSGI_APPLICATION = "ticketera.wsgi.application"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
@@ -21,11 +26,6 @@ TIME_ZONE = "America/Argentina/Jujuy"
 USE_TZ = True
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
-CSRF_TRUSTED_ORIGINS = [
-    origin.strip()
-    for origin in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",")
-    if origin.strip()
-]
 SECURE_SSL_REDIRECT = os.environ.get("DJANGO_SSL_REDIRECT") == "1"
 SECURE_HSTS_SECONDS = int(os.environ.get("DJANGO_HSTS_SECONDS", "0"))
 if SECURE_HSTS_SECONDS > 0:
@@ -78,11 +78,15 @@ LOGIN_URL = "backoffice:login"
 LOGIN_REDIRECT_URL = "backoffice:venue-list"
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
-if not DEBUG:
-    STORAGES = {
-        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
-        "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
-    }
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    # El manifiesto de whitenoise exige collectstatic: en desarrollo y tests se sirven los archivos tal cual.
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+        if DEBUG
+        else "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 
 if os.environ.get("DATABASE_URL"):
     DATABASES = {
