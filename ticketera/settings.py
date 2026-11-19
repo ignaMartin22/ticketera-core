@@ -93,3 +93,6 @@ MP_CONNECT_RETURN_URL = os.environ.get("MP_CONNECT_RETURN_URL", "/")
 MP_TEST_TOKENS = os.environ.get("MP_TEST_TOKENS") == "1"
 PUBLIC_API_URL = os.environ.get("PUBLIC_API_URL", "").rstrip("/")
 FRONT_BASE_URL = os.environ.get("FRONT_BASE_URL", "").rstrip("/")
+# Clave secreta de la aplicación para validar la firma del webhook de pagos.
+# Sin ella el webhook responde 503 mp_not_configured.
+MP_WEBHOOK_SECRET = os.environ.get("MP_WEBHOOK_SECRET", "")
