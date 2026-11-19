@@ -18,8 +18,9 @@ Cómo se conecta TicketJuy (Next.js) con ticketera-core (Django). Estado al 19/1
 | Catálogo y pedidos | `main` | Integrado |
 | Entradas con QR, portería, asistencia | `feat/escaneo-puerta` | Integrado en la rama `feat/escaneo-puerta` de TicketJuy |
 | Login único del personal | `feat/mercado-pago` | Sin integrar |
-| Conexión de Mercado Pago | `feat/mercado-pago` | En construcción en el backend |
-| Pago con Mercado Pago | no existe todavía | Contrato previsto más abajo, puede cambiar |
+| Conexión de Mercado Pago del boliche | `feat/mercado-pago` | Sin integrar (va en el panel) |
+| Link de pago con Mercado Pago | `feat/mercado-pago` | Sin integrar |
+| Confirmación del pago (`sync`, `paymentReview`) | `feat/mercado-pago` | En construcción en el backend |
 
 ## 1. Catálogo público
 
@@ -181,7 +182,7 @@ type Attendance = {
 
 ## 5. Mercado Pago: conexión del boliche
 
-En construcción. Rol `admin` del boliche. El contrato de esta sección está definido; se confirma cuando el slice se mergee.
+Rol `admin` del boliche.
 
 | Ruta | Uso |
 | --- | --- |
@@ -215,13 +216,49 @@ Los tokens se renuevan solos. Mostrá "Reconectar" solo cuando `needsReconnect` 
 
 ## 6. Mercado Pago: pago del pedido
 
-Todavía no existe. Contrato previsto:
+El front no usa ningún SDK ni credencial de Mercado Pago. No hay public key en el navegador: el backend arma el pago con la cuenta del boliche y devuelve una URL. El front solo redirige.
 
-- `POST /api/v1/venues/<boliche>/events/<evento>/orders/<uuid>/payment/` devuelve `{ initPoint }`. El botón "Pagar con Mercado Pago" llama a esto y redirige.
-- Mercado Pago devuelve al comprador a la página del pedido del front. Esa página consulta el pedido y, cuando el pago está confirmado, lo ve en `paid` con sus entradas.
-- El link de pago vence junto con la reserva.
+### Pedir el link: `POST /api/v1/venues/<boliche>/events/<evento>/orders/<uuid>/payment/`
 
-Hasta que exista, dejá el botón deshabilitado como está.
+Sin cuerpo y sin token: alcanza con el `id` del pedido. Ya está en la rama `feat/mercado-pago`.
+
+Respuesta `200`: `{ "initPoint": "https://www.mercadopago.com.ar/checkout/..." }`. Redirigí el navegador a esa URL tal cual. Es idempotente: pedirlo dos veces devuelve el mismo link.
+
+| Estado | `error` | Qué mostrar |
+| --- | --- | --- |
+| 404 | `not_found` | El pedido no existe en ese boliche y esa fecha. |
+| 409 | `order_expired` | La reserva venció: volver a elegir entradas. |
+| 409 | `order_already_paid` | Ya está pago: ir a la página del pedido. |
+| 409 | `venue_not_connected` | El boliche todavía no conectó Mercado Pago. "El pago online no está disponible para esta fecha." |
+| 502 | `mp_unavailable` | Mercado Pago no respondió: reintentar. |
+| 503 | `mp_not_configured` | El backend no tiene las credenciales cargadas. Solo en entornos sin configurar. |
+
+El link vence junto con la reserva (10 minutos). No se ofrece pago en efectivo.
+
+### La vuelta del comprador
+
+Mercado Pago devuelve al comprador a `/<boliche>/<evento>/pedido/<uuid>` del front, con parámetros propios en la URL. No confíes en esos parámetros: el estado real lo dice el backend.
+
+La confirmación llega al backend por un aviso de Mercado Pago que puede tardar unos segundos. Para no depender de eso, al cargar la página del pedido:
+
+1. Si el pedido está en `pending_payment`, llamá a `POST /api/v1/venues/<boliche>/events/<evento>/orders/<uuid>/payment/sync/` (sin cuerpo). Responde `{ order }` con el estado actualizado.
+2. Si sigue en `pending_payment`, repetí cada 3 a 5 segundos mientras la reserva esté vigente.
+3. Cuando pasa a `paid`, mostrá las entradas (`order.tickets`).
+
+`sync` y el campo `paymentReview` están en construcción en el backend; el contrato es este.
+
+### Pago recibido sin entradas
+
+`order.paymentReview` es `true` cuando el pago se aprobó pero no se pudieron emitir las entradas (por ejemplo, llegó con la reserva vencida y ya no había cupo). No hay reembolso automático. Mostrá: "Recibimos tu pago, pero no pudimos emitir tus entradas. Escribile al boliche con este número de pedido." y el `id` del pedido.
+
+### Qué cambiar en el front
+
+- **Botón "Pagar con Mercado Pago"** en la página del pedido: hoy está deshabilitado. Un server action llama a `payment`, y redirige a `initPoint` o muestra el error.
+- **Página del pedido**: sumar el `sync` con reintento y el aviso de `paymentReview`.
+- **Tipos**: agregar `paymentReview: boolean` a `Order`.
+- **Variables de entorno**: ninguna nueva. Sigue alcanzando con `TICKETERA_API_URL`.
+
+Internamente el backend puede pasar de la API de Preferences a la de Orders de Mercado Pago. Para el front no cambia nada: el campo sigue siendo `initPoint`.
 
 ## Pendiente del lado del front
 
