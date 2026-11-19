@@ -102,8 +102,9 @@ Las tandas (1ª, 2ª…) son tipos de entrada distintos con su propio precio y c
 
 - Cabecera `Authorization: Bearer <clave>` con una clave por usuario (`ApiToken`, `secrets.token_urlsafe(32)`). En la base solo queda el hash (`sha256`) y los últimos 6 caracteres como referencia.
 - La plataforma la genera con `manage.py create_api_token <email>`: la clave se muestra una sola vez.
+- **También vale el token del login del personal** (`POST /api/v1/auth/login/`, firmado y de 12 horas, ver [Multi-boliche](multi-boliche.md)): el dueño entra con su usuario y no hace falta una clave aparte. Se prueba primero la clave de larga duración y después el token firmado (`catalog.staff_auth.bearer_user`), y la regla de permiso es la misma con las dos. Un usuario inactivo no entra con ninguna.
 - El usuario del token tiene que administrar el boliche de la URL (membresía `admin`) o ser superusuario.
-- En este orden: sin clave, clave malformada o inactiva → 401 `unauthorized`; boliche inexistente → 404 `venue_unavailable`; sin permiso sobre el boliche → 403 `forbidden`.
+- En este orden: sin token, token malformado, vencido o inactivo → 401 `unauthorized`; boliche inexistente → 404 `venue_unavailable`; sin permiso sobre el boliche → 403 `forbidden`.
 
 ### Operaciones
 

@@ -67,7 +67,7 @@ La conexión local usa `localhost:5432` por defecto. Configurá `POSTGRES_HOST`,
 
 Los identificadores públicos son slugs. El slug de un evento se resuelve dentro de su boliche. Los precios se guardan como decimales y se exponen en pesos para las pantallas de catálogo. Cada tipo de entrada expone `available`, que descuenta las entradas vendidas y las reservas vigentes. `sold` conserva la cantidad vendida.
 
-Además, `/api/v1/manage/` es la API de gestión para el dashboard del dueño de cada boliche: alta, edición, pausa y baja de fechas y entradas. Se autentica con `Authorization: Bearer <clave>` (una clave por usuario, generada con `manage.py create_api_token <email>`) limitada a los boliches que el usuario administra. Ver la [spec del ABM de eventos](docs/specs/eventos-del-boliche.md).
+Además, `/api/v1/manage/` es la API de gestión para el dashboard del dueño de cada boliche: alta, edición, pausa y baja de fechas y entradas. Se autentica con `Authorization: Bearer <token>`: sirve el token de `POST /api/v1/auth/login/` (12 horas) o una clave de larga duración por usuario generada con `manage.py create_api_token <email>`. Queda limitada a los boliches que el usuario administra. Las rutas de la conexión de Mercado Pago viven bajo el mismo prefijo. Ver la [spec del ABM de eventos](docs/specs/eventos-del-boliche.md) y la [guía del front](docs/integracion-front.md).
 
 ## Pedidos sin cuenta
 

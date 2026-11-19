@@ -20,6 +20,7 @@ Cómo se conecta TicketJuy (Next.js) con ticketera-core (Django). Estado al 19/1
 | Login único del personal | `feat/mercado-pago` | Sin integrar |
 | Conexión de Mercado Pago del boliche | `feat/mercado-pago` | Sin integrar (va en el panel) |
 | Link de pago con Mercado Pago | `feat/mercado-pago` | Sin integrar |
+| API de gestión de fechas | `feat/mercado-pago` (integra #16) | Sin integrar (va en el dashboard) |
 | Confirmación del pago (`sync`, `paymentReview`) | `feat/mercado-pago` | En construcción en el backend |
 
 ## 1. Catálogo público
@@ -259,6 +260,90 @@ La confirmación llega al backend por un aviso de Mercado Pago que puede tardar 
 - **Variables de entorno**: ninguna nueva. Sigue alcanzando con `TICKETERA_API_URL`.
 
 Internamente el backend usa la API de Orders de Mercado Pago (el `initPoint` es el `checkout_url` de la order). Para el front no cambia nada: el campo sigue siendo `initPoint`.
+
+## 7. API de gestión de fechas
+
+Rol `admin` del boliche (o superusuario). Es la API para el dashboard del dueño: alta, edición, pausa y baja de fechas con sus entradas. Rutas bajo `/api/v1/manage/venues/<boliche>/events/`.
+
+### Autenticación
+
+Va en `Authorization: Bearer <token>`. Sirve **el token de `POST /api/v1/auth/login/`** (12 horas, ver la sección 3): el dueño entra con su usuario y el servidor de Next usa ese token. También se acepta una clave de larga duración (`ApiToken`) que la plataforma crea con `manage.py create_api_token <email>`, útil para scripts. El usuario tiene que ser `admin` del boliche de la URL; la regla es la misma con cualquiera de los dos tokens.
+
+### Rutas
+
+| Ruta | Uso |
+| --- | --- |
+| `GET /api/v1/manage/venues/<boliche>/events/` | Listado: borradores, finalizadas y pausadas incluidas. Responde `{ events: [...] }`. |
+| `POST /api/v1/manage/venues/<boliche>/events/` | Alta de la fecha con sus entradas. Responde `201 { event }`. |
+| `GET /api/v1/manage/venues/<boliche>/events/<evento>/` | Detalle `{ event }` con los tipos de entrada. |
+| `PATCH /api/v1/manage/venues/<boliche>/events/<evento>/` | Edición parcial (incluye pausar la venta). Responde `200 { event }`. |
+| `DELETE /api/v1/manage/venues/<boliche>/events/<evento>/` | Baja, solo sin ventas ni pedidos. Responde `204`. |
+
+Las rutas de Mercado Pago (sección 5) viven bajo el mismo prefijo `manage/venues/<boliche>/mercadopago/`.
+
+### Cuerpos
+
+Alta (`Content-Type: application/json`):
+
+```json
+{
+  "title": "Noche de prueba",
+  "startsAt": "2026-12-05T01:00:00-03:00",
+  "lineup": ["DJ Uno", "DJ Dos"],
+  "description": "",
+  "doorsNote": "Apertura 23:30",
+  "ageLimit": 18,
+  "dressCode": null,
+  "isPublished": false,
+  "salesOpen": true,
+  "ticketTypes": [
+    { "name": "Anticipada", "kind": "common", "price": 5000, "capacity": 100 },
+    { "name": "VIP", "kind": "vip", "price": 12000, "capacity": 20, "description": "Fila VIP", "isActive": true }
+  ]
+}
+```
+
+- Obligatorios: `title` (hasta 200 caracteres), `startsAt` (ISO 8601, futuro en el alta) y `ticketTypes` con al menos un ítem. El resto es opcional.
+- `lineup` es una lista de artistas o un texto con uno por línea. `ageLimit` va de 0 a 99 (por defecto 18). `isPublished` por defecto `false`; `salesOpen` por defecto `true`.
+- El `slug` de la fecha se genera del título y el de las entradas es `general-1`, `vip-1`... **Nunca se manda** `slug` al crear ni `sold`.
+- Cada entrada: `name` (hasta 150), `kind` (`common` por defecto o `vip`), `price` y `capacity` mayores a 0, `description` y `isActive` opcionales.
+
+Edición: se mandan solo los campos que cambian, por ejemplo `{ "salesOpen": false }` para pausar. En `ticketTypes`, un ítem **con** `slug` (el `id` que devuelve la API) modifica esa entrada; uno **sin** `slug` crea una nueva; `isActive: false` la desactiva. No se puede cambiar el `slug` de la fecha ni mandar `sold`.
+
+Respuesta de cada fecha:
+
+```ts
+type ManagedEvent = {
+  slug: string; title: string; startsAt: string;
+  isPublished: boolean; salesOpen: boolean;
+  sold: number; capacity: number; reserved: number;   // reserved = reservas vigentes
+  status: "finished" | "paused" | "sold_out" | "on_sale";
+  // solo en el detalle, el alta y la edición:
+  lineup: string[]; description: string; doorsNote: string; ageLimit: number; dressCode: string | null;
+  ticketTypes: { id: string; name: string; kind: "common" | "vip"; description: string; price: number;
+                 capacity: number; sold: number; reserved: number; isActive: boolean }[];
+};
+```
+
+### Errores
+
+| Estado | `error` | Cuándo |
+| --- | --- | --- |
+| 401 | `unauthorized` | Token faltante, inválido, vencido o de un usuario inactivo. |
+| 403 | `forbidden` | El usuario no es `admin` de ese boliche (puerta, caja u otro boliche). |
+| 404 | `venue_unavailable` | El boliche no existe. |
+| 404 | `event_unavailable` | La fecha no existe en ese boliche. |
+| 405 | `method_not_allowed` | Método no soportado en la ruta. |
+| 413 | `request_too_large` | Cuerpo de más de 8 KB. |
+| 415 | `expected_json` | Falta `Content-Type: application/json`. |
+| 400 | `invalid_request` | JSON inválido o no es un objeto. |
+| 400 | `invalid_title`, `invalid_starts_at`, `invalid_lineup`, `invalid_age_limit`, `invalid_doors_note`, `invalid_dress_code`, `invalid_description`, `invalid_is_published`, `invalid_sales_open`, `invalid_slug` | Campo de la fecha fuera de regla, o `slug` en el cuerpo. |
+| 400 | `invalid_ticket_types`, `invalid_name`, `invalid_kind`, `invalid_price`, `invalid_capacity`, `invalid_is_active`, `invalid_sold` | Entradas ausentes, repetidas, con `slug` desconocido o fuera de regla; `sold` en el cuerpo. |
+| 409 | `capacity_below_sales` | El cupo quedaría por debajo de vendidas + reservas vigentes. |
+| 409 | `has_sales` | Baja de una fecha con entradas vendidas (pausá la venta en su lugar). |
+| 409 | `has_orders` | Baja de una fecha que tiene pedidos. |
+
+Con la venta pausada, la API pública sigue mostrando la fecha (`salesOpen: false`) y `POST .../orders/` responde `409 sales_paused`; los pedidos ya reservados siguen pudiendo pagarse.
 
 ## Pendiente del lado del front
 
