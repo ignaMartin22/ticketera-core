@@ -61,6 +61,7 @@ TEMPLATES = [
     },
 ]
 LOGIN_URL = "backoffice:login"
+LOGIN_REDIRECT_URL = "backoffice:venue-list"
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
