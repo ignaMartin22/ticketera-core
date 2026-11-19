@@ -44,7 +44,7 @@ class VenueCatalogAdmin(admin.ModelAdmin):
 
 @admin.register(Event)
 class EventAdmin(VenueCatalogAdmin):
-    list_display = ["title", "venue", "starts_at", "is_published"]
+    list_display = ["title", "venue", "starts_at", "is_published", "sales_open"]
     # Solo ofrece los boliches que el usuario ya ve en la lista.
     list_filter = [("venue", admin.RelatedOnlyFieldListFilter)]
     list_select_related = ["venue"]
@@ -79,7 +79,7 @@ class TicketTypeAdminForm(forms.ModelForm):
 @admin.register(TicketType)
 class TicketTypeAdmin(VenueCatalogAdmin):
     form = TicketTypeAdminForm
-    list_display = ["name", "event", "price", "capacity", "sold", "is_active"]
+    list_display = ["name", "event", "kind", "price", "capacity", "sold", "is_active"]
     list_select_related = ["event", "event__venue"]
 
     def venue_id(self, obj):

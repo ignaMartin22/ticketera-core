@@ -48,10 +48,12 @@ def event_data(event):
         "doorsNote": event.doors_note,
         "ageLimit": event.age_limit,
         "dressCode": event.dress_code or None,
+        "salesOpen": event.sales_open,
         "ticketTypes": [
             {
                 "id": ticket_type.slug,
                 "name": ticket_type.name,
+                "kind": ticket_type.kind,
                 "description": ticket_type.description,
                 "price": float(ticket_type.price),
                 "capacity": ticket_type.capacity,
