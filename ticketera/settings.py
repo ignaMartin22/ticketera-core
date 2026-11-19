@@ -69,3 +69,12 @@ DATABASES = {
         "OPTIONS": {"sslmode": os.environ.get("POSTGRES_SSLMODE", "prefer")},
     },
 }
+
+# Mercado Pago (conexión del boliche). Todo es opcional: sin estas variables la app
+# arranca y las rutas de conexión responden 503 mp_not_configured.
+MP_APP_ID = os.environ.get("MP_APP_ID", "")
+MP_CLIENT_SECRET = os.environ.get("MP_CLIENT_SECRET", "")
+MP_REDIRECT_URI = os.environ.get("MP_REDIRECT_URI", "")
+MP_TOKEN_ENCRYPTION_KEY = os.environ.get("MP_TOKEN_ENCRYPTION_KEY", "")
+MP_CONNECT_RETURN_URL = os.environ.get("MP_CONNECT_RETURN_URL", "/")
+MP_TEST_TOKENS = os.environ.get("MP_TEST_TOKENS") == "1"
