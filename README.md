@@ -54,6 +54,8 @@ La conexión local usa `localhost:5432` por defecto. Configurá `POSTGRES_HOST`,
 
 Los identificadores públicos son slugs. El slug de un evento se resuelve dentro de su boliche. Los precios se guardan como decimales y se exponen en pesos para las pantallas de catálogo. Cada tipo de entrada expone `available`, que descuenta las entradas vendidas y las reservas vigentes. `sold` conserva la cantidad vendida.
 
+Además, `/api/v1/manage/` es la API de gestión para el dashboard del dueño de cada boliche: alta, edición, pausa y baja de fechas y entradas. Se autentica con `Authorization: Bearer <clave>` (una clave por usuario, generada con `manage.py create_api_token <email>`) limitada a los boliches que el usuario administra. Ver la [spec del ABM de eventos](docs/specs/eventos-del-boliche.md).
+
 ## Pedidos sin cuenta
 
 `POST /api/v1/venues/<boliche>/events/<evento>/orders/` recibe JSON y una cabecera `Idempotency-Key` con un UUID generado para el intento. Se reutiliza la misma clave al reintentar después de un error de red.

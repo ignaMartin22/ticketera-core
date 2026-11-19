@@ -2,11 +2,18 @@ from django import forms
 from django.contrib import admin
 from django.utils import timezone
 
-from .models import Event, Membership, TicketType, Venue
+from .models import ApiToken, Event, Membership, TicketType, Venue
 
 
 admin.site.register(Venue)
 admin.site.register(Membership)
+
+
+@admin.register(ApiToken)
+class ApiTokenAdmin(admin.ModelAdmin):
+    list_display = ["hint", "user", "created_at", "is_active"]
+    list_select_related = ["user"]
+    readonly_fields = ["key_hash", "hint", "user", "created_at"]
 
 
 def managed_venues(user):
@@ -54,7 +61,7 @@ class EventAdmin(VenueCatalogAdmin):
         return super().get_queryset(request).filter(venue__in=managed_venues(request.user))
 
     def get_readonly_fields(self, request, obj=None):
-        return ("venue",) if obj else ()
+        return ("venue", "slug") if obj else ()
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "venue":
@@ -87,7 +94,7 @@ class TicketTypeAdmin(VenueCatalogAdmin):
         return super().get_queryset(request).filter(event__venue__in=managed_venues(request.user))
 
     def get_readonly_fields(self, request, obj=None):
-        return ("event", "sold") if obj else ("sold",)
+        return ("event", "slug", "sold") if obj else ("sold",)
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "event":

@@ -13,11 +13,11 @@ Hoy hay dos implementaciones que no están conectadas:
 | Uso | Pensado para el dueño, en el celular | Formularios genéricos de Django |
 | Ingreso | Sin login | Superusuario del core |
 
-Lo que carga el dueño en el dashboard de TicketJuy **no llega** al catálogo público. Hasta conectar la API de gestión, las fechas reales de Infinity las carga el equipo de la plataforma desde el admin del core. El objetivo es que cada dashboard de cliente use la API de gestión y que el admin de Django quede para soporte.
+Lo que carga el dueño en el dashboard de TicketJuy **no llega** al catálogo público: el dashboard sigue en modo demo. La API de gestión (`/api/v1/manage/`) ya existe para conectarlo; hasta entonces, las fechas reales de Infinity las carga el equipo de la plataforma desde el admin del core, que queda para soporte.
 
 ## Quién puede
 
-- Los usuarios con membresía `admin` en el boliche, desde el dashboard de su sitio. Ver [Multi-boliche](multi-boliche.md).
+- Los usuarios con membresía `admin` en el boliche, desde el dashboard de su sitio con un token de la API de gestión. Ver [Multi-boliche](multi-boliche.md).
 - El equipo de la plataforma, desde el admin del core.
 - Puerta y caja no editan el catálogo.
 - Un administrador nunca ve ni toca fechas de otro boliche.
@@ -68,7 +68,7 @@ Las tandas (1ª, 2ª…) son tipos de entrada distintos con su propio precio y c
 
 - Se editan todos los campos de la fecha y sus entradas salvo el identificador y las vendidas.
 - Se pueden agregar tipos de entrada en cualquier momento.
-- **Debe:** el cupo no puede bajar de vendidas + reservas vigentes. Hoy lo valida el admin de Django bloqueando la fila; el panel de TicketJuy solo mira las vendidas.
+- **Debe:** el cupo no puede bajar de vendidas + reservas vigentes. Lo validan el admin de Django y la API de gestión bloqueando la fila; el panel de TicketJuy solo mira las vendidas.
 - Un tipo de entrada **con ventas** no se puede quitar: se baja el cupo o se desactiva.
 - Un tipo de entrada **sin ventas** se puede quitar.
 - Un cambio de precio aplica a las reservas nuevas. Los pedidos hechos conservan su precio.
@@ -83,7 +83,7 @@ Las tandas (1ª, 2ª…) son tipos de entrada distintos con su propio precio y c
 
 - Solo se puede eliminar una fecha **sin entradas vendidas**. Con ventas, se pausa la venta.
 - Pide confirmación: la fecha no se puede recuperar.
-- Hoy en el admin de Django solo el superusuario puede borrar. Los pedidos protegen la fecha a nivel base (`PROTECT`): una fecha con pedidos no se borra.
+- La API de gestión devuelve 409 `has_sales` si hay vendidas y 409 `has_orders` si hay pedidos (aunque no tengan ventas: los pedidos protegen la fecha a nivel base, `PROTECT`). En el admin de Django solo el superusuario puede borrar.
 
 ### Listado y resumen
 
@@ -94,22 +94,56 @@ Las tandas (1ª, 2ª…) son tipos de entrada distintos con su propio precio y c
 - Resumen del boliche: vendidas por fecha, ocupación por tipo (común, VIP y libres) y recaudación frente a la potencial.
 - La recaudación se calcula a precio de entrada, sin cargo de servicio. Pendiente: con pagos reales, sale de los pedidos pagados y descuenta la [comisión de la plataforma](comisiones.md).
 
+## API de gestión
+
+`/api/v1/manage/` es el contrato entre el core y el dashboard de cada repo de cliente. La consume **el servidor de Next**, nunca el navegador del dueño.
+
+### Autenticación
+
+- Cabecera `Authorization: Bearer <clave>` con una clave por usuario (`ApiToken`, `secrets.token_urlsafe(32)`). En la base solo queda el hash (`sha256`) y los últimos 6 caracteres como referencia.
+- La plataforma la genera con `manage.py create_api_token <email>`: la clave se muestra una sola vez.
+- El usuario del token tiene que administrar el boliche de la URL (membresía `admin`) o ser superusuario.
+- En este orden: sin clave, clave malformada o inactiva → 401 `unauthorized`; boliche inexistente → 404 `venue_unavailable`; sin permiso sobre el boliche → 403 `forbidden`.
+
+### Operaciones
+
+| Método | Ruta | Acción |
+| --- | --- | --- |
+| GET | `/api/v1/manage/venues/<boliche>/events/` | Listado con vendidas, cupo, reservas vigentes y estado, incluidos borradores y finalizados |
+| POST | `/api/v1/manage/venues/<boliche>/events/` | Alta de la fecha con sus entradas, en una transacción |
+| GET | `/api/v1/manage/venues/<boliche>/events/<evento>/` | Detalle con los tipos de entrada (vendidas y reservas por tipo) |
+| PATCH | `/api/v1/manage/venues/<boliche>/events/<evento>/` | Edición, incluido pausar o reanudar la venta, y altas o desactivaciones de entradas |
+| DELETE | `/api/v1/manage/venues/<boliche>/events/<evento>/` | Baja, solo sin ventas |
+
+### Cuerpo de la fecha
+
+`title` (obligatorio, ≤200), `startsAt` (ISO 8601, obligatorio y futuro en el alta), `lineup` (lista de artistas o texto), `description`, `doorsNote` (≤200), `ageLimit` (0–99, por defecto 18), `dressCode` (≤120), `isPublished` (por defecto `false`) y `salesOpen` (por defecto `true`). El `slug` se genera del título y **nunca se acepta** en el cuerpo.
+
+### Tipos de entrada
+
+- En el alta, `ticketTypes` es obligatorio con al menos un ítem: `{ name, kind, price, capacity, description?, isActive? }`. `name` ≤150, `kind` `common` (por defecto) o `vip`, `price` y `capacity` mayores a 0. Sin `description`, queda la de su tipo ("Ingreso general." / "Fila VIP en la puerta y acceso al sector VIP."). Los slugs se generan `general-1`, `vip-1`…
+- En la edición, un ítem **con** `slug` modifica ese tipo; uno **sin** `slug` lo crea. `isActive: false` lo desactiva. `sold` nunca se acepta.
+
+### Respuestas
+
+Cada fecha trae `slug`, `title`, `startsAt`, `isPublished`, `salesOpen`, `sold`, `capacity`, `reserved` y `status` (`finished` si ya empezó, si no `paused`, `sold_out` si no queda cupo o `on_sale`; un borrador se distingue por `isPublished: false`). El detalle suma `lineup`, `description`, `doorsNote`, `ageLimit`, `dressCode` y `ticketTypes` con `id`, `name`, `kind`, `description`, `price` (número), `capacity`, `sold`, `reserved` e `isActive`. El alta devuelve 201 y la edición 200 con la fecha; la baja, 204.
+
+### Errores
+
+JSON `{"error": codigo}`, como en la API pública (415 `expected_json`, 413 `request_too_large`).
+
+| Error | Cuándo |
+| --- | --- |
+| 400 `invalid_request` | JSON inválido o no es un objeto |
+| 400 `invalid_title`, `invalid_starts_at`, `invalid_lineup`, `invalid_age_limit`, `invalid_doors_note`, `invalid_dress_code`, `invalid_description`, `invalid_is_published`, `invalid_sales_open`, `invalid_slug` | Campo de la fecha ausente o fuera de regla; `slug` en el cuerpo |
+| 400 `invalid_ticket_types`, `invalid_name`, `invalid_kind`, `invalid_price`, `invalid_capacity`, `invalid_is_active`, `invalid_sold` | Entradas ausentes, repetidas, con `slug` desconocido o fuera de regla; `sold` en el cuerpo |
+| 404 `event_unavailable` | La fecha no existe en el boliche |
+| 409 `capacity_below_sales` | El cupo queda por debajo de vendidas + reservas vigentes |
+| 409 `has_sales` | Baja de una fecha con entradas vendidas |
+| 409 `has_orders` | Baja de una fecha con pedidos |
+
 ## Lo que falta en el core
 
 1. **Campos nuevos**:
    - Portada de la fecha, guardada como archivo y no como data URL. Requiere decidir dónde se guardan los archivos.
-2. **Identificadores fijos**: hoy el admin de Django deja cambiar el slug de una fecha o de una entrada ya creada. Tiene que quedar de solo lectura después del alta.
-3. **Reglas de baja**: no eliminar fechas con ventas ni tipos de entrada con ventas. La baja de una fecha sin ventas tiene que estar en la API de gestión, para el administrador del boliche.
-4. **API de gestión** para el dashboard de cada cliente, con autenticación por usuario y limitada a los boliches que administra. Por ejemplo:
-
-   | Método | Ruta | Acción |
-   | --- | --- | --- |
-   | GET | `/api/v1/manage/venues/<boliche>/events/` | Listado con vendidas, cupo, reservas y estado, incluidos borradores y finalizados |
-   | POST | `/api/v1/manage/venues/<boliche>/events/` | Alta con sus entradas |
-   | GET | `/api/v1/manage/venues/<boliche>/events/<evento>/` | Detalle |
-   | PATCH | `/api/v1/manage/venues/<boliche>/events/<evento>/` | Edición, incluido pausar o reanudar la venta |
-   | DELETE | `/api/v1/manage/venues/<boliche>/events/<evento>/` | Baja, solo sin ventas |
-
-   Falta decidir cómo se loguea el dueño en el dashboard de su sitio: por ejemplo, el servidor de Next manda email y contraseña al core y recibe un token de ese usuario. Además, el repo del cliente usa su propia credencial ([Clientes](clientes.md)).
-5. **Validaciones del servidor**: que el core aplique las reglas del panel (fecha futura al crear, precio y cupo mayores a 0, al menos una entrada). El panel las valida antes de enviar, pero el servidor tiene que validarlas de nuevo.
-6. **Pruebas** de aislamiento, de baja con y sin ventas y de identificadores fijos.
+2. **Login del dueño** desde el dashboard de su sitio. Hoy la plataforma genera los tokens con `manage.py create_api_token`; falta que el dueño entre con su email y contraseña y reciba el token sin intervención de la plataforma. Además, el repo del cliente va a usar su propia credencial ([Clientes](clientes.md)).
