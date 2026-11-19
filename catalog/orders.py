@@ -33,6 +33,10 @@ def reserve_order(venue_slug, event_slug, buyer, quantities, idempotency_key):
             raise OrderConflict("idempotency_key_reused")
         return existing, items, False
 
+    # La venta pausada no afecta los pedidos ya reservados (el reintento de arriba sigue devolviéndolos).
+    if not event.sales_open:
+        raise OrderConflict("sales_paused")
+
     ticket_types = list(
         TicketType.objects.select_for_update().filter(event=event, slug__in=quantities).order_by("pk"),
     )

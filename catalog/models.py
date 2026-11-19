@@ -141,6 +141,9 @@ class Event(models.Model):
     age_limit = models.PositiveSmallIntegerField(default=18, validators=[MaxValueValidator(99)])
     dress_code = models.CharField(max_length=120, blank=True)
     is_published = models.BooleanField(default=False)
+    sales_open = models.BooleanField(
+        default=True, help_text="Si está en no, la fecha se ve pero no acepta reservas.",
+    )
 
     class Meta:
         ordering = ["starts_at", "pk"]
@@ -164,9 +167,14 @@ class TicketTypeQuerySet(models.QuerySet):
 
 
 class TicketType(models.Model):
+    class Kind(models.TextChoices):
+        COMMON = "common", "Común"
+        VIP = "vip", "VIP"
+
     event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name="ticket_types")
     slug = models.SlugField()
     name = models.CharField(max_length=150)
+    kind = models.CharField(max_length=6, choices=Kind, default=Kind.COMMON)
     description = models.TextField(blank=True)
     price = models.DecimalField(max_digits=12, decimal_places=2)
     capacity = models.PositiveIntegerField()
