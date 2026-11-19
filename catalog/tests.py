@@ -1,9 +1,12 @@
+from uuid import uuid4
+
+from django.contrib import admin
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import RequestFactory, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import Event, Membership, TicketType, Venue
+from .models import Event, Membership, Order, OrderItem, TicketType, Venue
 
 
 class CatalogTests(TestCase):
@@ -29,6 +32,11 @@ class CatalogTests(TestCase):
         TicketType.objects.create(
             event=cls.moon_event, slug="hidden", name="Oculta", price=100, capacity=5, is_active=False,
         )
+        cls.sold_ticket = TicketType.objects.create(
+            event=cls.moon_event, slug="agotada", name="Agotada", price=200, capacity=5,
+            sold=5, is_active=False,
+        )
+        cls.root = get_user_model().objects.create_superuser("root", "root@example.com", "x")
         cls.venue_admin = get_user_model().objects.create_user(username="moon-admin", is_staff=True)
         Membership.objects.create(venue=cls.moon, user=cls.venue_admin, role=Membership.Role.ADMIN)
         Membership.objects.create(venue=cls.other, user=cls.venue_admin, role=Membership.Role.DOOR)
@@ -87,3 +95,59 @@ class CatalogTests(TestCase):
     def test_admin_login_page_renders_for_anonymous(self):
         response = self.client.get(reverse("admin:login"))
         self.assertEqual(response.status_code, 200)
+
+    @staticmethod
+    def admin_request(user):
+        request = RequestFactory().get("/admin/")
+        request.user = user
+        return request
+
+    def test_admin_slugs_are_readonly_once_created(self):
+        request = self.admin_request(self.venue_admin)
+        event_admin = admin.site._registry[Event]
+        self.assertEqual(event_admin.get_readonly_fields(request), ())
+        self.assertEqual(event_admin.get_readonly_fields(request, self.moon_event), ("venue", "slug"))
+        ticket_admin = admin.site._registry[TicketType]
+        self.assertEqual(ticket_admin.get_readonly_fields(request), ("sold",))
+        self.assertEqual(
+            ticket_admin.get_readonly_fields(request, self.moon_ticket), ("event", "slug", "sold")
+        )
+        venue_admin = admin.site._registry[Venue]
+        self.assertEqual(venue_admin.get_readonly_fields(request), ())
+        self.assertEqual(venue_admin.get_readonly_fields(request, self.moon), ("slug",))
+
+    def test_venue_admin_only_deletes_without_sales(self):
+        request = self.admin_request(self.venue_admin)
+        event_admin = admin.site._registry[Event]
+        ticket_admin = admin.site._registry[TicketType]
+        self.assertTrue(event_admin.has_delete_permission(request, self.draft))
+        self.assertTrue(ticket_admin.has_delete_permission(request, self.moon_ticket))
+        self.assertFalse(event_admin.has_delete_permission(request, self.moon_event))
+        self.assertFalse(ticket_admin.has_delete_permission(request, self.sold_ticket))
+        # Sin ventas pero de otro boliche: el aislamiento manda.
+        self.assertFalse(event_admin.has_delete_permission(request, self.other_event))
+        self.assertFalse(ticket_admin.has_delete_permission(request, self.other_ticket))
+
+    def test_superuser_deletes_even_with_sales(self):
+        request = self.admin_request(self.root)
+        for model, obj in [(Event, self.moon_event), (TicketType, self.sold_ticket)]:
+            self.assertTrue(admin.site._registry[model].has_delete_permission(request, obj))
+
+    def test_venue_admin_cannot_delete_with_orders_even_without_sales(self):
+        # Un pedido pendiente (sold = 0) protege la fecha y el tipo de entrada: PROTECT manda.
+        order = Order.objects.create(
+            event=self.draft, buyer_email="a@example.com", idempotency_key=uuid4(),
+            expires_at=timezone.now(),
+        )
+        ticket = TicketType.objects.create(
+            event=self.draft, slug="reservada", name="Reservada", price=100, capacity=5,
+        )
+        OrderItem.objects.create(
+            order=order, ticket_type=ticket, ticket_slug="reservada", quantity=1,
+            unit_price=100, unit_service_fee=0,
+        )
+        request = self.admin_request(self.venue_admin)
+        self.assertFalse(admin.site._registry[Event].has_delete_permission(request, self.draft))
+        self.assertFalse(admin.site._registry[TicketType].has_delete_permission(request, ticket))
+        request = self.admin_request(self.root)
+        self.assertTrue(admin.site._registry[Event].has_delete_permission(request, self.draft))

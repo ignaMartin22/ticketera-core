@@ -1,5 +1,6 @@
 from django import forms
 from django.contrib import admin, messages
+from django.db.models import Sum
 from django.utils import timezone
 
 from .models import Event, Membership, Order, Payment, Ticket, TicketType, Venue
@@ -7,7 +8,12 @@ from .orders import OrderConflict
 from .tickets import issue_tickets
 
 
-admin.site.register(Venue)
+@admin.register(Venue)
+class VenueAdmin(admin.ModelAdmin):
+    def get_readonly_fields(self, request, obj=None):
+        return ("slug",) if obj else ()
+
+
 admin.site.register(Membership)
 
 
@@ -36,7 +42,18 @@ class VenueCatalogAdmin(admin.ModelAdmin):
     has_view_permission = has_change_permission
 
     def has_delete_permission(self, request, obj=None):
-        return request.user.is_superuser
+        if request.user.is_superuser:
+            return True
+        if obj is None:
+            return self.has_module_permission(request)
+        # Sin ventas, el administrador del boliche puede darlo de baja.
+        return (
+            managed_venues(request.user).filter(pk=self.venue_id(obj)).exists()
+            and self.has_no_sales(obj)
+        )
+
+    def has_no_sales(self, obj):
+        return False
 
     def get_actions(self, request):
         actions = super().get_actions(request)
@@ -58,7 +75,15 @@ class EventAdmin(VenueCatalogAdmin):
         return super().get_queryset(request).filter(venue__in=managed_venues(request.user))
 
     def get_readonly_fields(self, request, obj=None):
-        return ("venue",) if obj else ()
+        return ("venue", "slug") if obj else ()
+
+    def has_no_sales(self, obj):
+        # Además de las vendidas, ningún pedido, entrada ni pago (PROTECT): gana la regla más restrictiva.
+        return (
+            not obj.ticket_types.aggregate(s=Sum("sold"))["s"]
+            and not obj.orders.exists()
+            and not obj.tickets.exists()
+        )
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "venue":
@@ -91,7 +116,10 @@ class TicketTypeAdmin(VenueCatalogAdmin):
         return super().get_queryset(request).filter(event__venue__in=managed_venues(request.user))
 
     def get_readonly_fields(self, request, obj=None):
-        return ("event", "sold") if obj else ("sold",)
+        return ("event", "slug", "sold") if obj else ("sold",)
+
+    def has_no_sales(self, obj):
+        return obj.sold == 0 and not obj.order_items.exists() and not obj.tickets.exists()
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "event":
