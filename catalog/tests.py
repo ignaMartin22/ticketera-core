@@ -90,6 +90,10 @@ class CatalogTests(TestCase):
         self.assertIn("event", response.context["adminform"].form.errors)
         self.assertFalse(TicketType.objects.filter(slug="forged").exists())
 
+    def test_admin_login_page_renders_for_anonymous(self):
+        response = self.client.get(reverse("admin:login"))
+        self.assertEqual(response.status_code, 200)
+
     @staticmethod
     def admin_request(user):
         request = RequestFactory().get("/admin/")
@@ -126,7 +130,3 @@ class CatalogTests(TestCase):
         request = self.admin_request(self.root)
         for model, obj in [(Event, self.moon_event), (TicketType, self.sold_ticket)]:
             self.assertTrue(admin.site._registry[model].has_delete_permission(request, obj))
-
-    def test_admin_login_page_renders_for_anonymous(self):
-        response = self.client.get(reverse("admin:login"))
-        self.assertEqual(response.status_code, 200)

@@ -7,7 +7,7 @@ Describen cómo funciona hoy cada parte del core. Cuando un cambio altera un com
 | [Clientes](clientes.md) | Un repo de frontend por boliche, qué vive en el core y cómo se conecta un cliente nuevo | Vigente. Credenciales por cliente pendientes |
 | [Multi-boliche](multi-boliche.md) | Boliches como tenants, roles y aislamiento de datos | Implementado |
 | [Catálogo y pedidos](catalogo-y-pedidos.md) | API pública, reservas de cupo e idempotencia | Implementado |
-| [ABM de eventos del boliche](eventos-del-boliche.md) | Alta, edición, pausa y baja de fechas y entradas por el equipo del boliche | Parcial: la plataforma carga desde el admin del core. Falta la API de gestión para el dashboard de cada cliente |
+| [ABM de eventos del boliche](eventos-del-boliche.md) | Alta, edición, pausa y baja de fechas y entradas por el equipo del boliche | Implementado: API de gestión con token por usuario. Falta conectar el dashboard de cada cliente y la portada |
 | [Comisiones](comisiones.md) | Cargo al comprador, comisión de la plataforma e historial | Implementado |
 | [Panel de la plataforma](panel-plataforma.md) | `/plataforma/`: alta de boliches, comisión, equipo y conexiones | Implementado |
 | [Conexiones](conexiones.md) | Mercado Pago, WhatsApp y email por boliche | Modelo listo, OAuth pendiente |

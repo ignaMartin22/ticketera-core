@@ -3,7 +3,7 @@ from django.contrib import admin
 from django.db.models import Sum
 from django.utils import timezone
 
-from .models import Event, Membership, TicketType, Venue
+from .models import ApiToken, Event, Membership, TicketType, Venue
 
 
 @admin.register(Venue)
@@ -13,6 +13,13 @@ class VenueAdmin(admin.ModelAdmin):
 
 
 admin.site.register(Membership)
+
+
+@admin.register(ApiToken)
+class ApiTokenAdmin(admin.ModelAdmin):
+    list_display = ["hint", "user", "created_at", "is_active"]
+    list_select_related = ["user"]
+    readonly_fields = ["key_hash", "hint", "user", "created_at"]
 
 
 def managed_venues(user):
