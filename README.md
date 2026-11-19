@@ -2,6 +2,38 @@
 
 Backend de TicketJuy para operar varios boliches desde una misma plataforma. Moon es el primer cliente. El frontend y el alcance del producto viven en [TicketJuy](https://github.com/ignaMartin22/TicketJuy).
 
+## Ejecutar el catálogo localmente
+
+Creá una base PostgreSQL y un usuario con acceso a ella. Con Python 3.12 o superior, configurá los datos de conexión desde PowerShell:
+
+```powershell
+python -m venv .venv
+.venv/Scripts/python.exe -m pip install -r requirements.txt
+$env:DJANGO_DEBUG = "1"
+$env:POSTGRES_DB = "ticketera"
+$env:POSTGRES_USER = "ticketera"
+$env:POSTGRES_PASSWORD = "<contraseña de desarrollo>"
+.venv/Scripts/python.exe manage.py migrate
+.venv/Scripts/python.exe manage.py createsuperuser
+.venv/Scripts/python.exe manage.py runserver
+```
+
+Abrí `http://127.0.0.1:8000/admin/` para crear un boliche, un evento y sus tipos de entrada. Activá el boliche y publicá el evento para verlo por API. Para delegar el catálogo, creá un usuario con estado de personal y una membresía de administración en ese boliche. Las membresías de puerta y caja quedan registradas para sus futuras herramientas.
+
+La conexión usa `localhost:5432` por defecto. Configurá `POSTGRES_HOST`, `POSTGRES_PORT` y `POSTGRES_SSLMODE` según la instancia. Fuera de desarrollo, configurá también `DJANGO_SECRET_KEY` y `DJANGO_ALLOWED_HOSTS`.
+
+## API pública
+
+| GET | Respuesta |
+| --- | --- |
+| `/api/v1/venues/` | `{ venues }` con los boliches activos |
+| `/api/v1/venues/<boliche>/events/` | `{ venue, events }` con los eventos publicados y sus tipos de entrada activos |
+| `/api/v1/venues/<boliche>/events/<evento>/` | `{ venue, event }` para una fecha concreta |
+
+Los identificadores públicos son slugs. El slug de un evento se resuelve dentro de su boliche. Los precios se guardan como decimales y se exponen en pesos para las pantallas de catálogo. Los endpoints son de lectura. El campo `sold` se actualizará cuando se implemente el flujo de órdenes.
+
+Ejecutá las pruebas con `.venv/Scripts/python.exe manage.py test catalog`. Usá un usuario PostgreSQL de desarrollo con permiso `CREATEDB` para que Django pueda crear y eliminar su base de pruebas.
+
 ## Flujos de Fuego Austral que sirven de referencia
 
 Los archivos seleccionados están disponibles en [la referencia local](reference/fuego-austral/README.md).
