@@ -20,6 +20,15 @@ $env:POSTGRES_PASSWORD = "<contraseña de desarrollo>"
 
 Para tener datos de prueba, `.venv/Scripts/python.exe manage.py seed_infinity` crea el boliche `infinity` con las mismas fechas que la demo de TicketJuy.
 
+En cualquier shell podés definir las variables en `.env` (copiá `.env.example`): `python-dotenv` las carga solas y las variables reales del entorno tienen prioridad.
+
+## Base de datos en Neon
+
+1. Creá el proyecto en [Neon](https://neon.tech) y copiá la connection string desde **Connect** del branch (incluye `sslmode=require`).
+2. Definí `DATABASE_URL` en `.env` con esa string. Mientras `DATABASE_URL` esté presente se ignoran las variables `POSTGRES_*`.
+3. Para `migrate`, `seed_infinity` y `createsuperuser` usá el endpoint **directo** (sin `-pooler`): el pooler es PgBouncer en modo transacción y las migraciones pueden fallar ahí. La app sí puede usar el endpoint con `-pooler`.
+4. La base de tests la crea Django al vuelo (`test_<nombre>`); funciona en Neon pero es lenta. Corré los tests contra la base local.
+
 Hay dos paneles:
 
 - `http://127.0.0.1:8000/plataforma/`: el [panel de la plataforma](docs/specs/panel-plataforma.md), solo para superusuarios. Ahí se dan de alta los boliches, se activan o pausan, se definen sus comisiones, se da acceso a su equipo y se ven sus conexiones.
@@ -33,7 +42,7 @@ Las membresías de puerta y caja quedan registradas para sus futuras herramienta
 
 El comportamiento de cada parte del core está en [docs/specs](docs/specs/README.md): [clientes](docs/specs/clientes.md), [multi-boliche](docs/specs/multi-boliche.md), [catálogo y pedidos](docs/specs/catalogo-y-pedidos.md), [ABM de eventos del boliche](docs/specs/eventos-del-boliche.md), [comisiones](docs/specs/comisiones.md), [panel de la plataforma](docs/specs/panel-plataforma.md) y [conexiones](docs/specs/conexiones.md). Si un cambio altera un comportamiento, actualizá la spec en el mismo PR.
 
-La conexión usa `localhost:5432` por defecto. Configurá `POSTGRES_HOST`, `POSTGRES_PORT` y `POSTGRES_SSLMODE` según la instancia. Fuera de desarrollo, configurá también `DJANGO_SECRET_KEY` y `DJANGO_ALLOWED_HOSTS`.
+La conexión local usa `localhost:5432` por defecto. Configurá `POSTGRES_HOST`, `POSTGRES_PORT` y `POSTGRES_SSLMODE` según la instancia, o `DATABASE_URL` para una connection string completa (Neon). Fuera de desarrollo, configurá también `DJANGO_SECRET_KEY` y `DJANGO_ALLOWED_HOSTS`.
 
 ## API pública
 

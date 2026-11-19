@@ -1,7 +1,11 @@
 import os
 from pathlib import Path
 
+import dj_database_url
+from dotenv import load_dotenv
+
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / ".env")
 DEBUG = os.environ.get("DJANGO_DEBUG") == "1"
 SECRET_KEY = (
     os.environ.get("DJANGO_SECRET_KEY", "django-insecure-local-development-only")
@@ -60,14 +64,23 @@ LOGIN_URL = "backoffice:login"
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ["POSTGRES_DB"],
-        "USER": os.environ["POSTGRES_USER"],
-        "PASSWORD": os.environ["POSTGRES_PASSWORD"],
-        "HOST": os.environ.get("POSTGRES_HOST", "localhost"),
-        "PORT": os.environ.get("POSTGRES_PORT", "5432"),
-        "OPTIONS": {"sslmode": os.environ.get("POSTGRES_SSLMODE", "prefer")},
-    },
-}
+if os.environ.get("DATABASE_URL"):
+    DATABASES = {
+        "default": dj_database_url.parse(
+            os.environ["DATABASE_URL"], conn_max_age=600, conn_health_checks=True,
+            disable_server_side_cursors=True,
+        )
+    }
+    DATABASES["default"].setdefault("OPTIONS", {}).setdefault("sslmode", "require")
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.environ["POSTGRES_DB"],
+            "USER": os.environ["POSTGRES_USER"],
+            "PASSWORD": os.environ["POSTGRES_PASSWORD"],
+            "HOST": os.environ.get("POSTGRES_HOST", "localhost"),
+            "PORT": os.environ.get("POSTGRES_PORT", "5432"),
+            "OPTIONS": {"sslmode": os.environ.get("POSTGRES_SSLMODE", "prefer")},
+        },
+    }
