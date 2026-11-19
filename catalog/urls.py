@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views
+from . import payment_confirm, payments, views
 
 urlpatterns = [
     path("venues/", views.venue_list, name="venue-list"),
@@ -15,5 +15,15 @@ urlpatterns = [
         "venues/<slug:venue_slug>/events/<slug:event_slug>/orders/<uuid:order_id>/",
         views.order_detail,
         name="order-detail",
+    ),
+    path(
+        "venues/<slug:venue_slug>/events/<slug:event_slug>/orders/<uuid:order_id>/payment/",
+        payments.order_payment,
+        name="order-payment",
+    ),
+    path(
+        "venues/<slug:venue_slug>/events/<slug:event_slug>/orders/<uuid:order_id>/payment/sync/",
+        payment_confirm.order_payment_sync,
+        name="order-payment-sync",
     ),
 ]

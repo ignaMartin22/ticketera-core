@@ -75,7 +75,7 @@ Una tarjeta por proveedor con estado, cuenta vinculada, fechas y último error. 
 
 ## Pendiente
 
-- Botón "Conectar Mercado Pago" con OAuth.
+- Botón "Conectar Mercado Pago" en la pestaña Conexiones: el OAuth ya está hecho (ver [Conexiones](conexiones.md)) y hoy se inicia por la API de gestión.
 - Pedidos, compradores y reporte de ventas por boliche.
 - Registro de quién activó o pausó un boliche.
 - Probar el ancho de celular en un navegador real.

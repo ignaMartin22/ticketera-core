@@ -21,6 +21,13 @@ TIME_ZONE = "America/Argentina/Jujuy"
 USE_TZ = True
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",")
+    if origin.strip()
+]
+if os.environ.get("DJANGO_BEHIND_PROXY") == "1":
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
@@ -40,6 +47,7 @@ INSTALLED_APPS = [
 ]
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -64,6 +72,11 @@ LOGIN_URL = "backoffice:login"
 LOGIN_REDIRECT_URL = "backoffice:venue-list"
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+if not DEBUG:
+    STORAGES = {
+        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+        "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+    }
 
 if os.environ.get("DATABASE_URL"):
     DATABASES = {
@@ -85,3 +98,17 @@ else:
             "OPTIONS": {"sslmode": os.environ.get("POSTGRES_SSLMODE", "prefer")},
         },
     }
+
+# Mercado Pago (conexión del boliche). Todo es opcional: sin estas variables la app
+# arranca y las rutas de conexión responden 503 mp_not_configured.
+MP_APP_ID = os.environ.get("MP_APP_ID", "")
+MP_CLIENT_SECRET = os.environ.get("MP_CLIENT_SECRET", "")
+MP_REDIRECT_URI = os.environ.get("MP_REDIRECT_URI", "")
+MP_TOKEN_ENCRYPTION_KEY = os.environ.get("MP_TOKEN_ENCRYPTION_KEY", "")
+MP_CONNECT_RETURN_URL = os.environ.get("MP_CONNECT_RETURN_URL", "/")
+MP_TEST_TOKENS = os.environ.get("MP_TEST_TOKENS") == "1"
+PUBLIC_API_URL = os.environ.get("PUBLIC_API_URL", "").rstrip("/")
+FRONT_BASE_URL = os.environ.get("FRONT_BASE_URL", "").rstrip("/")
+# Clave secreta de la aplicación para validar la firma del webhook de pagos.
+# Sin ella el webhook responde 503 mp_not_configured.
+MP_WEBHOOK_SECRET = os.environ.get("MP_WEBHOOK_SECRET", "")

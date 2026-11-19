@@ -69,6 +69,13 @@ API pública que consume el repo de cada cliente (TicketJuy para Infinity) desde
 - **Debe:** la respuesta no incluye el email, el nombre ni el teléfono del comprador. El UUID funciona como dato privado del comprador.
 - **Debe:** un pedido solo se encuentra con su boliche y su fecha. Con otra ruta da 404.
 
+## Pago y entradas
+
+- `POST .../orders/<uuid>/payment/` crea el link de pago (order de Checkout Pro) con el token del boliche y la comisión de la plataforma. Ver [Comisiones](comisiones.md).
+- **Debe:** el webhook de Mercado Pago confirma cada pago una sola vez. Al confirmar, el pedido pasa a `paid`, se emiten las entradas (una por unidad, con QR firmado de un solo uso) y deja de contarse como reserva vigente. Si la reserva venció, se emite solo si queda cupo.
+- Los pedidos con importe 0 se marcan pagados y emiten sus entradas al reservar.
+- `GET` del pedido devuelve `status: paid`, las entradas con su texto de QR y `paymentReview`.
+
 ## Admin del catálogo
 
 - **Debe:** el cupo de un tipo de entrada no puede bajar de `vendidas + reservas vigentes`. La validación bloquea la misma fila que la reserva, así que no compite con una compra en curso.
@@ -76,6 +83,5 @@ API pública que consume el repo de cada cliente (TicketJuy para Infinity) desde
 
 ## Pendiente
 
-- Confirmar el pago y pasar de reserva a vendida: sumar a `sold` y dejar de contar ese pedido como reserva vigente. Si no, el cupo se cuenta dos veces hasta que vence la reserva.
-- Qué hacer si el pago llega después del vencimiento: emitir si queda cupo o reembolsar.
+- Reembolsos. Hoy un pago que llega con la reserva vencida y sin cupo (`no_capacity`), con otro monto (`mismatch`) o repetido (`duplicate`) queda marcado para que la plataforma lo revise.
 - Protección contra reservas automatizadas (captcha y límite por IP).

@@ -36,7 +36,7 @@ En el core, desde `/plataforma/`:
 
 1. **Nuevo boliche:** identificador, datos, marca y comisión. Queda pausado.
 2. **Equipo:** cargar al dueño y a su gente con su rol.
-3. **Conexiones:** conectar Mercado Pago (pendiente: OAuth) y, más adelante, WhatsApp y email.
+3. **Conexiones:** conectar Mercado Pago (el OAuth está hecho y lo inicia el administrador del boliche desde su dashboard; falta el botón en el panel) y, más adelante, WhatsApp y email.
 4. **Activar** cuando el repo del cliente esté publicado y tenga al menos una fecha.
 
 En el repo nuevo del cliente:

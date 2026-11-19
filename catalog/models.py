@@ -157,7 +157,7 @@ class TicketTypeQuerySet(models.QuerySet):
         return self.annotate(
             reserved=Sum(
                 "order_items__quantity",
-                filter=Q(order_items__order__expires_at__gt=at),
+                filter=Q(order_items__order__expires_at__gt=at, order_items__order__paid_at__isnull=True),
                 default=0,
             ),
         )
@@ -195,6 +195,10 @@ class Order(models.Model):
     idempotency_key = models.UUIDField()
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField()
+    paid_at = models.DateTimeField(null=True, blank=True)
+    platform_fee = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    mp_order_id = models.CharField(max_length=64, blank=True)
+    mp_init_point = models.URLField(max_length=500, blank=True)
 
     class Meta:
         constraints = [
@@ -222,3 +226,65 @@ class OrderItem(models.Model):
             models.UniqueConstraint(fields=["order", "ticket_type"], name="unique_order_ticket_type"),
             models.CheckConstraint(condition=Q(quantity__gt=0), name="order_item_quantity_positive"),
         ]
+
+
+class Ticket(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
+    order = models.ForeignKey(Order, on_delete=models.PROTECT, related_name="tickets")
+    event = models.ForeignKey(Event, on_delete=models.PROTECT, related_name="tickets")
+    ticket_type = models.ForeignKey(TicketType, on_delete=models.PROTECT, related_name="tickets")
+    created_at = models.DateTimeField(auto_now_add=True)
+    used_at = models.DateTimeField(null=True, blank=True)
+    used_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="+",
+    )
+
+    class Meta:
+        ordering = ["created_at", "pk"]
+
+
+class Payment(models.Model):
+    """Pago de Mercado Pago asociado a un pedido, con lo que hicimos al confirmarlo."""
+
+    class Outcome(models.TextChoices):
+        ISSUED = "issued", "Aprobado, entradas emitidas"
+        NO_CAPACITY = "no_capacity", "Pagado sin entradas: la reserva venció y no hay cupo (a revisar)"
+        MISMATCH = "mismatch", "Aprobado, pero el monto o la moneda no coinciden (a revisar)"
+        DUPLICATE = "duplicate", "Aprobado, pero el pedido ya estaba pagado por otro pago (a revisar)"
+        NOT_APPROVED = "not_approved", "No aprobado"
+
+    order = models.ForeignKey(Order, on_delete=models.PROTECT, related_name="payments")
+    mp_order_id = models.CharField(max_length=64, unique=True)
+    mp_reference = models.CharField(max_length=100, blank=True)
+    mp_user_id = models.BigIntegerField()
+    status = models.CharField(max_length=30)
+    status_detail = models.CharField(max_length=100, blank=True)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    outcome = models.CharField(max_length=12, choices=Outcome)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+
+
+class DoorLoginFailure(models.Model):
+    """Intento fallido de login de portería, para limitar los reintentos por usuario."""
+
+    username = models.CharField(max_length=150, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+
+class MercadoPagoAccount(models.Model):
+    """Cuenta de Mercado Pago conectada por un boliche (OAuth). Los tokens van cifrados."""
+
+    venue = models.OneToOneField(Venue, on_delete=models.CASCADE, related_name="mp_account")
+    mp_user_id = models.BigIntegerField(db_index=True)
+    access_token = models.TextField()
+    refresh_token = models.TextField()
+    public_key = models.CharField(max_length=200)
+    live_mode = models.BooleanField()
+    expires_at = models.DateTimeField()
+    needs_reconnect = models.BooleanField(default=False)
+    connected_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
