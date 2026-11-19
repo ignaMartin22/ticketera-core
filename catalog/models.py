@@ -170,3 +170,18 @@ class DoorLoginFailure(models.Model):
 
     username = models.CharField(max_length=150, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+
+class MercadoPagoAccount(models.Model):
+    """Cuenta de Mercado Pago conectada por un boliche (OAuth). Los tokens van cifrados."""
+
+    venue = models.OneToOneField(Venue, on_delete=models.CASCADE, related_name="mp_account")
+    mp_user_id = models.BigIntegerField(db_index=True)
+    access_token = models.TextField()
+    refresh_token = models.TextField()
+    public_key = models.CharField(max_length=200)
+    live_mode = models.BooleanField()
+    expires_at = models.DateTimeField()
+    needs_reconnect = models.BooleanField(default=False)
+    connected_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)

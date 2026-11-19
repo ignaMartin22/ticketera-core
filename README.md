@@ -61,6 +61,30 @@ El pedido pasa al estado `paid` y su respuesta incluye `tickets`, una lista vac�
 
 `qr` es el texto que el frontend dibuja como código QR: el id de la entrada más una firma hecha con `DJANGO_SECRET_KEY`. Cambiar esa clave invalida los QR ya emitidos.
 
+## Mercado Pago: conexión del boliche
+
+Cada boliche conecta su propia cuenta de Mercado Pago por OAuth. El administrador toca "conectar", autoriza en Mercado Pago y la plataforma guarda los tokens cifrados y los renueva sola. Crear pagos y el webhook van en otro slice.
+
+| Variable | Uso |
+| --- | --- |
+| `MP_APP_ID` | Id de la aplicación de Mercado Pago |
+| `MP_CLIENT_SECRET` | Client secret de la aplicación |
+| `MP_REDIRECT_URI` | URL pública del callback: `https://<dominio>/api/v1/mercadopago/oauth/callback/` |
+| `MP_TOKEN_ENCRYPTION_KEY` | Clave Fernet para cifrar los tokens (`python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`) |
+| `MP_CONNECT_RETURN_URL` | A dónde vuelve el navegador al terminar (por defecto `/`) |
+| `MP_TEST_TOKENS` | `1` agrega `test_token=true` al intercambio, para credenciales de prueba |
+
+Si falta alguna de las cuatro primeras, la app arranca igual y las rutas de conexión responden `503` (`mp_not_configured`). Perder `MP_TOKEN_ENCRYPTION_KEY` obliga a reconectar todos los boliches.
+
+| Ruta | Uso |
+| --- | --- |
+| `POST /api/v1/manage/venues/<boliche>/mercadopago/connect/` | Rol `admin`. Devuelve `{ authorizationUrl }`; el `state` firmado vence a los 10 minutos |
+| `GET /api/v1/mercadopago/oauth/callback/` | Lo abre el navegador al volver de Mercado Pago. Siempre redirige a `MP_CONNECT_RETURN_URL` con `mp=connected&venue=<slug>` o `mp=error&reason=<invalid_state|denied|exchange_failed|not_configured>` |
+| `GET /api/v1/manage/venues/<boliche>/mercadopago/` | Rol `admin`. `{ connected, needsReconnect, mpUserId, liveMode, connectedAt, expiresAt }`, sin tokens |
+| `DELETE /api/v1/manage/venues/<boliche>/mercadopago/` | Rol `admin`. Borra la cuenta guardada (`204`) |
+
+`catalog.mp_connect.get_access_token(venue)` devuelve el access token en claro y lo renueva si le quedan menos de 30 días; levanta `MercadoPagoNotConnected` si el boliche debe reconectar. Programá `manage.py refresh_mp_tokens` una vez por día para renovar las cuentas por vencer aunque nadie cobre.
+
 ## Personal
 
 Todo el personal de los boliches entra con el mismo login. El token es el mismo que usa la portería y el rol de la persona en cada boliche decide qué puede hacer.
