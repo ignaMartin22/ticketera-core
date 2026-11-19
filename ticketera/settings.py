@@ -26,6 +26,12 @@ CSRF_TRUSTED_ORIGINS = [
     for origin in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",")
     if origin.strip()
 ]
+SECURE_SSL_REDIRECT = os.environ.get("DJANGO_SSL_REDIRECT") == "1"
+SECURE_HSTS_SECONDS = int(os.environ.get("DJANGO_HSTS_SECONDS", "0"))
+if SECURE_HSTS_SECONDS > 0:
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = os.environ.get("DJANGO_HSTS_PRELOAD") == "1"
+# Solo activar detrás de un proxy que termina TLS y sanea X-Forwarded-Proto.
 if os.environ.get("DJANGO_BEHIND_PROXY") == "1":
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 AUTH_PASSWORD_VALIDATORS = [

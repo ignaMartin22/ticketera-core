@@ -71,6 +71,8 @@ ls -l deploy/.env          # -rw------- ...
 git check-ignore deploy/.env   # imprime deploy/.env (si hay .git): está ignorado
 ```
 
+**Redirección HTTPS y HSTS.** `DJANGO_SSL_REDIRECT`, `DJANGO_HSTS_SECONDS` y `DJANGO_HSTS_PRELOAD` quedan en `0` en la VPS de pruebas: Caddy ya redirige HTTP a HTTPS, y con `DJANGO_SSL_REDIRECT=1` Django redirigiría también el healthcheck interno por HTTP. Activarlos solo si el proxy sanea `X-Forwarded-Proto` (`DJANGO_BEHIND_PROXY=1`) y ya se probó el dominio con HTTPS.
+
 **Guardá una copia de `deploy/.env` fuera de la VPS** (si se pierde `MP_TOKEN_ENCRYPTION_KEY`, los tokens guardados quedan inservibles). Nunca lo commitees.
 
 ## 4. Levantar
