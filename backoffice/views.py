@@ -9,8 +9,10 @@ from django.db import transaction
 from django.db.models import Count, DecimalField, ExpressionWrapper, F, Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
+from catalog import mp_connect
 from catalog.models import Membership, Order, OrderItem, TicketType, Venue, VenueIntegration
 
 from .forms import FeeForm, MemberForm, VenueCreateForm, VenueForm
@@ -227,9 +229,33 @@ def member_remove(request, slug, pk):
     return redirect("backoffice:venue-team", slug=slug)
 
 
-@platform_required
-def venue_integrations(request, slug):
-    venue = get_object_or_404(Venue, slug=slug)
+def integrations_page(request, venue, **extra):
     return render(request, "backoffice/venue_integrations.html", venue_context(
         venue, "integrations", integrations=integrations_for(venue),
+        mp_configured=mp_connect.is_configured(), **extra,
     ))
+
+
+@platform_required
+def venue_integrations(request, slug):
+    return integrations_page(request, get_object_or_404(Venue, slug=slug))
+
+
+@platform_required
+@require_POST
+@never_cache
+def venue_mp_connect(request, slug):
+    """Genera el link de autorización y lo muestra en la respuesta del POST: no se guarda ni va en la URL."""
+    venue = get_object_or_404(Venue, slug=slug)
+    if not mp_connect.is_configured():
+        return integrations_page(request, venue)
+    return integrations_page(request, venue, mp_link=mp_connect.platform_link(venue, request.user))
+
+
+@platform_required
+@require_POST
+def venue_mp_disconnect(request, slug):
+    venue = get_object_or_404(Venue, slug=slug)
+    mp_connect.disconnect(venue)
+    messages.success(request, f"Desconectamos Mercado Pago de {venue.name}.")
+    return redirect("backoffice:venue-integrations", slug=venue.slug)

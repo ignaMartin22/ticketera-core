@@ -1,13 +1,20 @@
 from datetime import timedelta
 from decimal import Decimal
+from unittest import mock
 from uuid import uuid4
 
+from cryptography.fernet import Fernet
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.core import signing
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from catalog.models import Event, FeeChange, Membership, Order, OrderItem, TicketType, Venue, VenueIntegration
+from catalog import crypto
+from catalog.models import (
+    Event, FeeChange, MercadoPagoAccount, Membership, Order, OrderItem, TicketType, Venue, VenueIntegration,
+)
+from catalog.mp_connect import STATE_SALT
 
 User = get_user_model()
 
@@ -209,3 +216,114 @@ class BackofficeTests(TestCase):
         self.assertEqual(response.context["sales"][0]["reserved"], 0)
         detail = self.client.get(reverse("backoffice:venue-detail", args=["moon"]))
         self.assertEqual(detail.context["reserved"], 0)
+
+
+MP_SETTINGS = dict(
+    MP_APP_ID="123", MP_CLIENT_SECRET="secreto", MP_REDIRECT_URI="https://api.example.com/cb",
+    MP_CONNECT_RETURN_URL="https://app.example.com/panel",
+)
+ACCESS, REFRESH, PUBLIC_KEY = "APP_USR-acceso-claro", "TG-refresco-claro", "APP_USR-pk-claro"
+
+
+class PlatformMercadoPagoTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.root = User.objects.create_superuser("root", "root@example.com", "x")
+        cls.a = Venue.objects.create(slug="a", name="Boliche A", city="Jujuy")
+        cls.b = Venue.objects.create(slug="b", name="Boliche B", city="Jujuy")
+        cls.staff = User.objects.create_user("staff", "staff@example.com")
+        Membership.objects.create(venue=cls.a, user=cls.staff, role=Membership.Role.ADMIN)
+
+    def setUp(self):
+        settings_ = override_settings(MP_TOKEN_ENCRYPTION_KEY=Fernet.generate_key().decode(), **MP_SETTINGS)
+        settings_.enable()
+        self.addCleanup(settings_.disable)
+        self.client.force_login(self.root)
+
+    def url(self, name, slug="a"):
+        return reverse(f"backoffice:{name}", args=[slug])
+
+    def generate(self, slug="a"):
+        with mock.patch("catalog.mp.authorization_url", return_value="https://auth.mp/x?s=1") as auth:
+            response = self.client.post(self.url("venue-mp-connect", slug))
+        return response, auth
+
+    def connect_account(self, venue):
+        account = MercadoPagoAccount.objects.create(
+            venue=venue, mp_user_id=777, access_token=crypto.encrypt(ACCESS),
+            refresh_token=crypto.encrypt(REFRESH), public_key=PUBLIC_KEY, live_mode=True,
+            expires_at=timezone.now() + timedelta(days=100),
+        )
+        VenueIntegration.objects.create(
+            venue=venue, provider="mercadopago", status="connected", account_id="777",
+            connected_at=timezone.now(), expires_at=account.expires_at,
+        )
+
+    def test_01_non_superusers_cannot_generate_or_disconnect(self):
+        self.connect_account(self.a)
+        self.client.force_login(self.staff)
+        for name in ("venue-mp-connect", "venue-mp-disconnect"):
+            with mock.patch("catalog.mp.authorization_url") as auth:
+                self.assertEqual(self.client.post(self.url(name)).status_code, 403)
+            auth.assert_not_called()
+        self.assertTrue(MercadoPagoAccount.objects.filter(venue=self.a).exists())
+        self.client.logout()
+        for name in ("venue-mp-connect", "venue-mp-disconnect"):
+            url = self.url(name)
+            self.assertRedirects(self.client.post(url), f"{reverse('backoffice:login')}?next={url}")
+
+    def test_02_generate_link_shows_it_once(self):
+        response = self.client.get(self.url("venue-integrations"))
+        self.assertContains(response, "Generar link de conexión")
+        self.assertNotContains(response, "https://auth.mp/x")
+        response, auth = self.generate()
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "https://auth.mp/x?s=1")
+        self.assertContains(response, "Vence en 10 minutos.")
+        self.assertContains(response, "Copiar link")
+        self.assertNotContains(self.client.get(self.url("venue-integrations")), "https://auth.mp/x")
+        self.assertFalse(MercadoPagoAccount.objects.exists())
+
+    def test_03_state_identifies_venue_and_platform_origin(self):
+        _, auth = self.generate()
+        payload = signing.loads(auth.call_args.args[0], salt=STATE_SALT, max_age=600)
+        self.assertEqual((payload["v"], payload["u"], payload["o"]), (self.a.pk, self.root.pk, "platform"))
+        _, auth_b = self.generate("b")
+        self.assertEqual(signing.loads(auth_b.call_args.args[0], salt=STATE_SALT)["v"], self.b.pk)
+
+    def test_04_not_configured_disables_the_button(self):
+        with override_settings(MP_APP_ID=""):
+            response = self.client.get(self.url("venue-integrations"))
+            self.assertContains(response, "Faltan las credenciales de Mercado Pago en el servidor.")
+            self.assertContains(response, 'disabled>Generar link de conexión</button>')
+            self.assertNotContains(response, self.url("venue-mp-connect") + '"')
+            with mock.patch("catalog.mp.authorization_url") as auth:
+                post = self.client.post(self.url("venue-mp-connect"))
+            auth.assert_not_called()
+            self.assertNotContains(post, "https://auth.mp")
+
+    def test_05_connected_shows_account_and_disconnect_is_isolated(self):
+        self.connect_account(self.a)
+        self.connect_account(self.b)
+        response = self.client.get(self.url("venue-integrations"))
+        self.assertContains(response, "777")
+        self.assertContains(response, "Desconectar")
+        self.assertContains(response, "Reconectar")
+        self.assertRedirects(self.client.post(self.url("venue-mp-disconnect")), self.url("venue-integrations"))
+        self.assertFalse(MercadoPagoAccount.objects.filter(venue=self.a).exists())
+        integration = VenueIntegration.objects.get(venue=self.a, provider="mercadopago")
+        self.assertEqual((integration.status, integration.account_id), ("disconnected", ""))
+        self.assertTrue(MercadoPagoAccount.objects.filter(venue=self.b).exists())
+        self.assertEqual(VenueIntegration.objects.get(venue=self.b, provider="mercadopago").status, "connected")
+
+    def test_06_page_never_shows_secrets(self):
+        self.connect_account(self.a)
+        self.generate()
+        html = self.client.get(self.url("venue-integrations")).content.decode()
+        for secret in (ACCESS, REFRESH, PUBLIC_KEY, "secreto"):
+            self.assertNotIn(secret, html)
+
+    def test_07_whatsapp_and_email_stay_disabled(self):
+        html = self.client.get(self.url("venue-integrations")).content.decode()
+        self.assertEqual(html.count("Disponible cuando se habilite la integración."), 2)
+        self.assertEqual(html.count('<button type="button" class="btn btn-sm" disabled>Conectar</button>'), 2)

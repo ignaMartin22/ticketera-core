@@ -18,4 +18,7 @@ urlpatterns = [
     path("boliches/<slug:slug>/equipo/", views.venue_team, name="venue-team"),
     path("boliches/<slug:slug>/equipo/<int:pk>/quitar/", views.member_remove, name="member-remove"),
     path("boliches/<slug:slug>/conexiones/", views.venue_integrations, name="venue-integrations"),
+    path("boliches/<slug:slug>/conexiones/mercadopago/link/", views.venue_mp_connect, name="venue-mp-connect"),
+    path("boliches/<slug:slug>/conexiones/mercadopago/desconectar/", views.venue_mp_disconnect,
+         name="venue-mp-disconnect"),
 ]

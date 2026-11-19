@@ -17,11 +17,58 @@
       {% if integration.account_label %}<p class="help">Cuenta: {{ integration.account_label }}{% if integration.account_id %} ({{ integration.account_id }}){% endif %}</p>{% endif %}
       {% if integration.connected_at %}<p class="help">Conectada el {{ integration.connected_at|date:"j/n/Y" }}{% if integration.expires_at %} · vence el {{ integration.expires_at|date:"j/n/Y" }}{% endif %}</p>{% endif %}
       {% if integration.last_error %}<p class="error">{{ integration.last_error }}</p>{% endif %}
+      {% if integration.provider == "mercadopago" %}
+        {% if integration.status == "connected" and integration.account_id %}<p class="help">Cuenta de Mercado Pago: {{ integration.account_id }}</p>{% endif %}
+        <div class="stack">
+          {% if mp_link %}
+            <div>
+              <div class="copy-row">
+                <input type="text" id="mp-link" value="{{ mp_link }}" readonly aria-label="Link de conexión de Mercado Pago">
+                <button type="button" class="btn btn-sm" id="mp-copy">Copiar link</button>
+                <a class="btn btn-sm" href="{{ mp_link }}" target="_blank" rel="noopener noreferrer">Abrir</a>
+              </div>
+              <p class="help">Mandáselo al dueño del boliche. Tiene que abrirlo con la cuenta de Mercado Pago donde va a cobrar. Vence en 10 minutos.</p>
+            </div>
+          {% endif %}
+          {% if mp_configured %}
+            <form method="post" action="{% url 'backoffice:venue-mp-connect' venue.slug %}">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm{% if integration.status != 'connected' %} btn-primary{% endif %}">{% if integration.status == "connected" %}Reconectar{% else %}Generar link de conexión{% endif %}</button>
+            </form>
+          {% else %}
+            <div>
+              <button type="button" class="btn btn-sm" disabled>Generar link de conexión</button>
+              <p class="help">Faltan las credenciales de Mercado Pago en el servidor.</p>
+            </div>
+          {% endif %}
+          {% if integration.status == "connected" %}
+            <form method="post" action="{% url 'backoffice:venue-mp-disconnect' venue.slug %}">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-ghost btn-sm btn-danger" data-confirm="¿Desconectar Mercado Pago de {{ venue.name }}? Dejan de cobrarse las entradas hasta que se vuelva a conectar.">Desconectar</button>
+            </form>
+          {% endif %}
+        </div>
+      {% else %}
       <div>
-        <button type="button" class="btn btn-sm" disabled>{% if integration.provider == "mercadopago" %}Conectar Mercado Pago{% else %}Conectar{% endif %}</button>
+        <button type="button" class="btn btn-sm" disabled>Conectar</button>
         <p class="help">Disponible cuando se habilite la integración.</p>
       </div>
+      {% endif %}
     </li>
   {% endfor %}
 </ul>
+{% endblock %}
+{% block tab_scripts %}
+<script>
+  (function () {
+    var button = document.getElementById("mp-copy"), input = document.getElementById("mp-link");
+    if (!button || !input) return;
+    button.addEventListener("click", function () {
+      input.select();
+      var done = function () { button.textContent = "Copiado"; };
+      if (navigator.clipboard) navigator.clipboard.writeText(input.value).then(done, function () { document.execCommand("copy"); done(); });
+      else { document.execCommand("copy"); done(); }
+    });
+  })();
+</script>
 {% endblock %}
