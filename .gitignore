@@ -4,4 +4,6 @@ __pycache__/
 *.py[cod]
 db.sqlite3
 staticfiles/
-.env
+.env*
+!.env.example
+TicketJuy/
