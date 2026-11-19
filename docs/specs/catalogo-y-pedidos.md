@@ -61,6 +61,13 @@ API pública que consume el repo de cada cliente (TicketJuy para Infinity) desde
 | 409 `sales_paused` | La fecha tiene la venta pausada. No afecta el reintento de una reserva ya hecha |
 | 409 `ticket_type_unavailable` | Un tipo de entrada no existe en esa fecha o está inactivo |
 | 409 `insufficient_capacity` | No alcanza el cupo |
+| 429 `rate_limited` | La IP superó el límite de intentos (ver abajo) |
+
+### Límite por IP
+
+- Cada POST suma 1 al contador de la IP, se valide o no el cuerpo. Al pasar de `ORDERS_RATE_LIMIT` intentos (por defecto 20) dentro de una ventana de 1 hora desde el primero, responde 429 `rate_limited` sin tocar la base.
+- **Debe:** el límite es por `REMOTE_ADDR`. `X-Forwarded-For` lo puede falsificar el cliente: solo sirve detrás de un proxy que lo sobrescriba, lo que queda pendiente para la puesta en producción.
+- El contador vive en el caché de Django (LocMemCache), que es por proceso: con varios workers el límite efectivo se multiplica. Alcanza para el piloto; en producción conviene un caché compartido.
 
 ## Consulta de un pedido
 
@@ -86,4 +93,4 @@ API pública que consume el repo de cada cliente (TicketJuy para Infinity) desde
 ## Pendiente
 
 - Reembolsos. Hoy un pago que llega con la reserva vencida y sin cupo (`no_capacity`), con otro monto (`mismatch`) o repetido (`duplicate`) queda marcado para que la plataforma lo revise.
-- Protección contra reservas automatizadas (captcha y límite por IP).
+- Protección contra reservas automatizadas: el límite por IP ya rige (ver arriba); falta captcha o verificación de bots.

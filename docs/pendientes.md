@@ -24,7 +24,7 @@ Qué falta para vender una fecha real de Infinity con TicketJuy. Estado al 19/11
 2. **Página de la entrada.** La API ya devuelve las entradas del pedido con el texto del QR. La página `/entrada/[code]` de TicketJuy todavía usa datos de prueba.
 3. **Envío de entradas** por email y WhatsApp. La API de WhatsApp Business requiere aprobación de Meta y puede tardar: conviene pedirla ya.
 4. **Escáner de puerta** en el navegador del celular. La API de escaneo y el login del personal, con límite de intentos, están hechos; falta la pantalla en TicketJuy que abre la cámara. Después, el modo sin señal con sincronización al volver, que necesita una regla de operación para cuando dos celulares sin conexión aceptan el mismo QR.
-5. **Protección contra reservas automatizadas** en `POST .../orders/` (captcha o verificación de bots y límite por IP). Hoy un bot puede bloquear cupo de a 10 entradas durante 10 minutos, una y otra vez.
+5. **Protección contra reservas automatizadas** en `POST .../orders/`. Ya rige un límite por IP (`ORDERS_RATE_LIMIT`, 20 intentos/hora por defecto, 429 `rate_limited`; ver la [spec](specs/catalogo-y-pedidos.md)). Falta captcha o verificación de bots: un bot con muchas IPs todavía puede bloquear cupo de a 10 entradas durante 10 minutos, una y otra vez.
 
 ## Panel y operación
 
