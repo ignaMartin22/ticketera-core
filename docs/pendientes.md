@@ -25,7 +25,7 @@ Qué falta para vender una fecha real de Infinity con TicketJuy. Estado al 19/11
 3. **Envío de entradas** por email y WhatsApp. La API de WhatsApp Business requiere aprobación de Meta y puede tardar: conviene pedirla ya.
 4. **Escáner de puerta** en el navegador del celular. La API de escaneo y el login del personal, con límite de intentos, están hechos; falta la pantalla en TicketJuy que abre la cámara. Después, el modo sin señal con sincronización al volver, que necesita una regla de operación para cuando dos celulares sin conexión aceptan el mismo QR.
 5. **Protección contra reservas automatizadas** en `POST .../orders/` (captcha o verificación de bots y un límite de intentos). Hoy un bot puede bloquear cupo de a 10 entradas durante 10 minutos, una y otra vez.
-   - **El límite no puede ser por `REMOTE_ADDR`** (PR #14, retenido). El core recibe los pedidos desde el servidor de Next del repo del cliente, así que esa IP es la de Vercel o la del proxy del deploy, no la del comprador. Un límite de 20 por hora e IP cortaría las compras de todo el sitio después de 20 intentos.
+   - **El límite no puede ser por `REMOTE_ADDR`** (PR #14, retenido). El core recibe los pedidos desde el servidor de Next del repo del cliente, así que esa IP es la de Railway (donde corre el frontend) o la del proxy del deploy del core, no la del comprador. Un límite de 20 por hora e IP cortaría las compras de todo el sitio después de 20 intentos.
    - Opciones: que el front mande la IP del comprador en un encabezado y que el core solo le crea si la request trae la credencial del repo del cliente ([Clientes](specs/clientes.md)), o limitar por email o teléfono del comprador, o por boliche.
    - El contador tiene que vivir en un caché compartido entre workers. `LocMemCache` es por proceso y multiplica el límite por la cantidad de workers de gunicorn.
 
@@ -41,7 +41,7 @@ Qué falta para vender una fecha real de Infinity con TicketJuy. Estado al 19/11
 ## Puesta en producción
 
 9. Hosting del backend. **Resuelto para pruebas**: imagen Docker con gunicorn y whitenoise, PostgreSQL en contenedor con backup diario (`deploy/backup.sh`) y proxy HTTPS de Caddy en una VPS (ver `docs/despliegue-vps.md`), con `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS` y `DJANGO_BEHIND_PROXY` configurados y `migrate` en cada arranque. Queda pendiente para producción real: PostgreSQL administrado (la app ya acepta `DATABASE_URL`), un dominio propio y sacar `MP_TEST_TOKENS`.
-10. Frontend en Vercel con `TICKETERA_API_URL` apuntando al backend, y el dominio.
+10. Frontend en Railway con `TICKETERA_API_URL` apuntando al backend, y el dominio.
 11. Monitoreo de errores (por ejemplo Sentry) y logs.
 
 ## Contenido y decisiones

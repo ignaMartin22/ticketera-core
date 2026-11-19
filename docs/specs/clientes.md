@@ -50,7 +50,7 @@ En el repo nuevo del cliente:
    | Identificador del boliche (`HOME_VENUE` en TicketJuy) | El identificador que se cargó en el core |
    | Credencial de la API | Pendiente: ver abajo |
 
-3. Publicar el frontend en Vercel con el dominio del cliente.
+3. Publicar el frontend en Railway con el dominio del cliente.
 
 ## Pendiente
 
