@@ -17,8 +17,8 @@ from django.utils import timezone
 
 from .models import MercadoPagoAccount, Membership, Order, Payment, Ticket, TicketType
 from .mp import MercadoPagoError
-from .payment_confirm import process_payment
-from .test_payments import make_order, make_venue
+from .payment_confirm import process_order
+from .test_payments import MP_ORDER_ID, make_order, make_venue
 from .views import order_data
 
 SECRET = "secreto-del-webhook"
@@ -38,12 +38,18 @@ def total_of(order):
     return sum(i.quantity * (i.unit_price + i.unit_service_fee) for i in order.items.all())
 
 
-def mp_payment(order, user_id=USER_A, payment_id=9001, status="approved", amount=None, **extra):
-    amount = total_of(order) if amount is None else amount
+def mp_order(order, user_id=USER_A, order_id=MP_ORDER_ID, status="processed", amount=None, **extra):
+    amount = f"{(total_of(order) if amount is None else amount):.2f}"
     return {
-        "id": payment_id, "status": status, "status_detail": "accredited",
-        "external_reference": str(order.pk), "transaction_amount": float(amount),
-        "currency_id": "ARS", "collector_id": user_id, **extra,
+        "id": order_id, "status": status, "status_detail": "accredited",
+        "external_reference": str(order.pk), "total_amount": amount, "total_paid_amount": amount,
+        "currency": "ARS", "user_id": str(user_id),
+        "transactions": {"payments": [{
+            "id": "PAY01", "amount": amount, "paid_amount": amount, "status": status,
+            "status_detail": "accredited", "payment_method": {"id": "master", "type": "credit_card"},
+            "reference": {"id": "183961436800"},
+        }]},
+        **extra,
     }
 
 
@@ -58,10 +64,10 @@ class Base(TestCase):
         return set(Ticket.objects.filter(order=order).values_list("pk", flat=True))
 
 
-class ProcessPaymentTests(Base):
+class ProcessOrderTests(Base):
     def test_01_approved_issues_tickets(self):
         order = make_order(self.event_a)
-        record = process_payment(self.acc_a, mp_payment(order))
+        record = process_order(self.acc_a, mp_order(order))
         self.assertEqual(record.outcome, ISSUED)
         order.refresh_from_db()
         self.assertIsNotNone(order.paid_at)
@@ -70,11 +76,11 @@ class ProcessPaymentTests(Base):
 
     def test_02_same_payment_twice(self):
         order = make_order(self.event_a)
-        process_payment(self.acc_a, mp_payment(order))
+        process_order(self.acc_a, mp_order(order))
         first = self.tickets(order)
         self.general_a.refresh_from_db()
         sold = self.general_a.sold
-        process_payment(self.acc_a, mp_payment(order))
+        process_order(self.acc_a, mp_order(order))
         self.assertEqual(Payment.objects.count(), 1)
         self.assertEqual(self.tickets(order), first)
         self.general_a.refresh_from_db()
@@ -82,7 +88,7 @@ class ProcessPaymentTests(Base):
 
     def test_03_rejected(self):
         order = make_order(self.event_a)
-        record = process_payment(self.acc_a, mp_payment(order, status="rejected"))
+        record = process_order(self.acc_a, mp_order(order, status="created"))
         self.assertEqual(record.outcome, Payment.Outcome.NOT_APPROVED)
         order.refresh_from_db()
         self.assertIsNone(order.paid_at)
@@ -90,9 +96,9 @@ class ProcessPaymentTests(Base):
 
     def test_04_mismatch_amount_and_currency(self):
         order = make_order(self.event_a)
-        record = process_payment(self.acc_a, mp_payment(order, amount=1))
+        record = process_order(self.acc_a, mp_order(order, amount=1))
         self.assertEqual(record.outcome, Payment.Outcome.MISMATCH)
-        record = process_payment(self.acc_a, mp_payment(order, payment_id=9002, currency_id="USD"))
+        record = process_order(self.acc_a, mp_order(order, order_id="ORDTST02", currency="USD"))
         self.assertEqual(record.outcome, Payment.Outcome.MISMATCH)
         order.refresh_from_db()
         self.assertIsNone(order.paid_at)
@@ -101,7 +107,7 @@ class ProcessPaymentTests(Base):
     def test_05_expired_reservation_with_capacity(self):
         order = make_order(self.event_a)
         Order.objects.filter(pk=order.pk).update(expires_at=timezone.now() - timedelta(minutes=1))
-        record = process_payment(self.acc_a, mp_payment(order))
+        record = process_order(self.acc_a, mp_order(order))
         self.assertEqual(record.outcome, ISSUED)
         self.assertEqual(Ticket.objects.filter(order=order).count(), 3)
 
@@ -110,7 +116,7 @@ class ProcessPaymentTests(Base):
         order = make_order(self.event_a, {"general": 2})
         Order.objects.filter(pk=order.pk).update(expires_at=timezone.now() - timedelta(minutes=1))
         make_order(self.event_a, {"general": 2})
-        record = process_payment(self.acc_a, mp_payment(order))
+        record = process_order(self.acc_a, mp_order(order))
         self.assertEqual(record.outcome, NO_CAPACITY)
         order.refresh_from_db()
         self.assertIsNone(order.paid_at)
@@ -120,38 +126,72 @@ class ProcessPaymentTests(Base):
 
     def test_07_second_payment_is_duplicate(self):
         order = make_order(self.event_a)
-        process_payment(self.acc_a, mp_payment(order))
+        process_order(self.acc_a, mp_order(order))
         first = self.tickets(order)
-        record = process_payment(self.acc_a, mp_payment(order, payment_id=9002))
+        record = process_order(self.acc_a, mp_order(order, order_id="ORDTST02"))
         self.assertEqual(record.outcome, Payment.Outcome.DUPLICATE)
         self.assertEqual(self.tickets(order), first)
 
     def test_08_isolation_between_venues(self):
         order = make_order(self.event_a)
-        self.assertIsNone(process_payment(self.acc_b, mp_payment(order, user_id=USER_B)))
+        self.assertIsNone(process_order(self.acc_b, mp_order(order, user_id=USER_B)))
         self.assertEqual(Payment.objects.count(), 0)
         self.assertEqual(Ticket.objects.count(), 0)
 
     def test_09_wrong_collector(self):
         order = make_order(self.event_a)
-        self.assertIsNone(process_payment(self.acc_a, mp_payment(order, user_id=USER_B)))
+        self.assertIsNone(process_order(self.acc_a, mp_order(order, user_id=USER_B)))
         self.assertEqual(Payment.objects.count(), 0)
 
     def test_10_bad_external_reference(self):
         order = make_order(self.event_a)
-        payment = mp_payment(order)
-        self.assertIsNone(process_payment(self.acc_a, {**payment, "external_reference": "no-es-uuid"}))
-        self.assertIsNone(process_payment(self.acc_a, {**payment, "external_reference": str(uuid4())}))
-        self.assertIsNone(process_payment(self.acc_a, {**payment, "external_reference": None}))
+        payment = mp_order(order)
+        self.assertIsNone(process_order(self.acc_a, {**payment, "external_reference": "no-es-uuid"}))
+        self.assertIsNone(process_order(self.acc_a, {**payment, "external_reference": str(uuid4())}))
+        self.assertIsNone(process_order(self.acc_a, {**payment, "external_reference": None}))
         self.assertEqual(Payment.objects.count(), 0)
 
     def test_11_refund_keeps_issued(self):
         order = make_order(self.event_a)
-        process_payment(self.acc_a, mp_payment(order))
+        process_order(self.acc_a, mp_order(order))
         first = self.tickets(order)
-        record = process_payment(self.acc_a, mp_payment(order, status="refunded"))
+        record = process_order(self.acc_a, mp_order(order, status="refunded"))
         self.assertEqual((record.status, record.outcome), ("refunded", ISSUED))
         self.assertEqual(self.tickets(order), first)
+
+    def test_01b_user_id_text_matches_integer_mp_user_id(self):  # (f)
+        order = make_order(self.event_a)
+        self.assertIsInstance(self.acc_a.mp_user_id, int)
+        data = mp_order(order)
+        self.assertEqual(data["user_id"], "1001")
+        self.assertEqual(process_order(self.acc_a, data).outcome, ISSUED)
+
+    def test_01c_processed_accredited_saves_reference(self):  # (g)
+        order = make_order(self.event_a)
+        record = process_order(self.acc_a, mp_order(order))
+        record.refresh_from_db()
+        self.assertEqual(
+            (record.outcome, record.status, record.status_detail, record.mp_reference, record.mp_order_id),
+            (ISSUED, "processed", "accredited", "183961436800", MP_ORDER_ID),
+        )
+        self.assertEqual(record.amount, total_of(order))
+
+    def test_03b_created_or_other_detail_is_not_approved(self):  # (h)
+        order = make_order(self.event_a)
+        record = process_order(self.acc_a, mp_order(order, status="created", status_detail="waiting_payment"))
+        self.assertEqual((record.outcome, record.status), (Payment.Outcome.NOT_APPROVED, "created"))
+        other = mp_order(order, order_id="ORDTST02", status_detail="pending_review_manual")
+        record = process_order(self.acc_a, other)
+        self.assertEqual(record.outcome, Payment.Outcome.NOT_APPROVED)
+        order.refresh_from_db()
+        self.assertIsNone(order.paid_at)
+        self.assertEqual(Ticket.objects.count(), 0)
+
+    def test_03c_falls_back_to_total_amount(self):
+        order = make_order(self.event_a)
+        data = mp_order(order)
+        del data["total_paid_amount"]
+        self.assertEqual(process_order(self.acc_a, data).outcome, ISSUED)
 
 
 class ConcurrencyTests(TransactionTestCase):
@@ -159,14 +199,14 @@ class ConcurrencyTests(TransactionTestCase):
         venue, event, general, _ = make_venue("a")
         account = make_account(venue, USER_A)
         order = make_order(event)
-        payment = mp_payment(order)
+        payment = mp_order(order)
         barrier = Barrier(2)
         errors = []
 
         def run():
             try:
                 barrier.wait()
-                process_payment(account, payment)
+                process_order(account, payment)
             except Exception as exc:  # pragma: no cover
                 errors.append(exc)
             finally:
@@ -192,41 +232,42 @@ def token_for(venue):
 class WebhookTests(Base):
     def setUp(self):
         super().setUp()
-        self.get = mock.patch("catalog.mp.get_payment").start()
+        self.get = mock.patch("catalog.mp.get_order").start()
         mock.patch("catalog.mp_connect.get_access_token", side_effect=token_for).start()
         self.addCleanup(mock.patch.stopall)
 
     def sign(self, data_id, request_id="req-1", ts="1700000000", secret=SECRET):
+        data_id = str(data_id).lower()  # Mercado Pago firma los ids alfanuméricos en minúsculas
         manifest = f"id:{data_id};request-id:{request_id};ts:{ts};"
         digest = hmac.new(secret.encode(), manifest.encode(), hashlib.sha256).hexdigest()
         return {"HTTP_X_SIGNATURE": f"ts={ts},v1={digest}", "HTTP_X_REQUEST_ID": request_id}
 
-    def notify(self, user_id=USER_A, payment_id=9001, type_="payment", headers=None, body=None, **extra):
+    def notify(self, user_id=USER_A, order_id=MP_ORDER_ID, type_="order", headers=None, body=None, **extra):
         body = body if body is not None else {
-            "action": "payment.updated", "type": type_, "data": {"id": str(payment_id)}, "user_id": user_id, **extra,
+            "action": "order.processed", "type": type_, "data": {"id": order_id}, "user_id": user_id, **extra,
         }
-        headers = self.sign(payment_id) if headers is None else headers
+        headers = self.sign(order_id) if headers is None else headers
         return self.client.post(
-            f"{WEBHOOK}?data.id={payment_id}&type={type_}", data=json.dumps(body),
+            f"{WEBHOOK}?data.id={order_id}&type={type_}", data=json.dumps(body),
             content_type="application/json", **headers,
         )
 
     def test_12_valid_notification_issues(self):
         order = make_order(self.event_a)
-        self.get.return_value = mp_payment(order)
+        self.get.return_value = mp_order(order)
         response = self.notify()
         self.assertEqual((response.status_code, response.json()), (200, {"ok": True}))
-        self.assertEqual(self.get.call_args.args, ("tok-a", "9001"))
+        self.assertEqual(self.get.call_args.args, ("tok-a", MP_ORDER_ID))
         self.assertEqual(Payment.objects.get().outcome, ISSUED)
         self.assertEqual(Ticket.objects.filter(order=order).count(), 3)
 
     def test_13_bad_or_missing_signature(self):
-        headers = self.sign(9001)
+        headers = self.sign(MP_ORDER_ID)
         headers["HTTP_X_SIGNATURE"] = headers["HTTP_X_SIGNATURE"][:-2] + "00"
         response = self.notify(headers=headers)
         self.assertEqual((response.status_code, response.json()), (401, {"error": "invalid_signature"}))
         self.assertEqual(self.notify(headers={"HTTP_X_REQUEST_ID": "req-1"}).status_code, 401)
-        self.assertEqual(self.notify(headers=self.sign(9999)).status_code, 401)
+        self.assertEqual(self.notify(headers=self.sign("ORDOTRO")).status_code, 401)
         self.get.assert_not_called()
 
     @override_settings(MP_WEBHOOK_SECRET="")
@@ -245,7 +286,7 @@ class WebhookTests(Base):
     def test_17_same_owner_two_venues(self):
         MercadoPagoAccount.objects.filter(pk=self.acc_b.pk).update(mp_user_id=USER_A)
         order = make_order(self.event_b)
-        self.get.return_value = mp_payment(order, user_id=USER_A)
+        self.get.return_value = mp_order(order, user_id=USER_A)
         self.assertEqual(self.notify().status_code, 200)
         record = Payment.objects.get()
         self.assertEqual(record.order, order)
@@ -256,7 +297,7 @@ class WebhookTests(Base):
         other = make_venue("c")[0]
         acc_c = make_account(other, USER_B)
         response = self.notify(
-            user_id=USER_B, type_="mp-connect", headers=self.sign(9001), action="application.deauthorized",
+            user_id=USER_B, type_="mp-connect", headers=self.sign(MP_ORDER_ID), action="application.deauthorized",
         )
         self.assertEqual(response.status_code, 200)
         for account in (self.acc_b, acc_c):
@@ -275,15 +316,41 @@ class WebhookTests(Base):
 
     def test_20_same_notification_twice(self):
         order = make_order(self.event_a)
-        self.get.return_value = mp_payment(order)
+        self.get.return_value = mp_order(order)
         self.assertEqual(self.notify().status_code, 200)
         self.assertEqual(self.notify().status_code, 200)
         self.assertEqual(Payment.objects.count(), 1)
         self.assertEqual(Ticket.objects.filter(order=order).count(), 3)
 
+    def test_19b_payment_type_does_nothing(self):  # (j)
+        order = make_order(self.event_a)
+        self.get.return_value = mp_order(order)
+        response = self.notify(type_="payment", order_id="9001")
+        self.assertEqual((response.status_code, response.json()), (200, {"ok": True}))
+        self.get.assert_not_called()
+        self.assertEqual(Payment.objects.count(), 0)
+
+    def test_12b_uppercase_id_signed_lowercase_and_fetched_as_is(self):  # (i)
+        order = make_order(self.event_a)
+        self.get.return_value = mp_order(order)
+        self.assertEqual(MP_ORDER_ID, MP_ORDER_ID.upper())
+        headers = self.sign(MP_ORDER_ID.lower())
+        response = self.notify(order_id=MP_ORDER_ID, headers=headers)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.get.call_args.args, ("tok-a", MP_ORDER_ID))
+        self.assertEqual(Payment.objects.get().mp_order_id, MP_ORDER_ID)
+        self.get.reset_mock()
+        # firmado con el id en mayúsculas: no es la firma de Mercado Pago
+        manifest = f"id:{MP_ORDER_ID};request-id:req-1;ts:1700000000;"
+        digest = hmac.new(SECRET.encode(), manifest.encode(), hashlib.sha256).hexdigest()
+        bad = {"HTTP_X_SIGNATURE": f"ts=1700000000,v1={digest}", "HTTP_X_REQUEST_ID": "req-1"}
+        self.assertEqual(self.notify(order_id=MP_ORDER_ID, headers=bad).status_code, 401)
+        self.get.assert_not_called()
+
     def test_invalid_body_is_400(self):
         response = self.client.post(
-            f"{WEBHOOK}?data.id=9001&type=payment", data="[1]", content_type="application/json", **self.sign(9001),
+            f"{WEBHOOK}?data.id={MP_ORDER_ID}&type=order", data="[1]", content_type="application/json",
+            **self.sign(MP_ORDER_ID),
         )
         self.assertEqual(response.status_code, 400)
 
@@ -300,27 +367,27 @@ def sync_url(order, venue="a", event="fecha"):
 class SyncTests(Base):
     def setUp(self):
         super().setUp()
-        self.search = mock.patch("catalog.mp.search_payments").start()
+        self.get = mock.patch("catalog.mp.get_order").start()
         mock.patch("catalog.mp_connect.get_access_token", side_effect=token_for).start()
         self.addCleanup(mock.patch.stopall)
 
     def with_link(self, order):
-        Order.objects.filter(pk=order.pk).update(mp_preference_id="pref-1")
+        Order.objects.filter(pk=order.pk).update(mp_order_id=MP_ORDER_ID)
         return order
 
     def test_21_sync_confirms(self):
         order = self.with_link(make_order(self.event_a))
-        self.search.return_value = [mp_payment(order)]
+        self.get.return_value = mp_order(order)
         response = self.client.post(sync_url(order))
         self.assertEqual(response.status_code, 200)
         data = response.json()["order"]
         self.assertEqual(data["status"], "paid")
         self.assertEqual(len(data["tickets"]), 3)
-        self.assertEqual(self.search.call_args.args, ("tok-a", str(order.pk)))
+        self.assertEqual(self.get.call_args.args, ("tok-a", MP_ORDER_ID))
 
     def test_22_sync_mp_failure(self):
         order = self.with_link(make_order(self.event_a))
-        self.search.side_effect = MercadoPagoError(500)
+        self.get.side_effect = MercadoPagoError(500)
         response = self.client.post(sync_url(order))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["order"]["status"], "pending_payment")
@@ -328,15 +395,15 @@ class SyncTests(Base):
     def test_23_sync_without_query(self):
         no_link = make_order(self.event_a)
         paid = self.with_link(make_order(self.event_a))
-        process_payment(self.acc_a, mp_payment(paid))
+        process_order(self.acc_a, mp_order(paid))
         for order in (no_link, paid):
             self.assertEqual(self.client.post(sync_url(order)).status_code, 200)
-        self.search.assert_not_called()
+        self.get.assert_not_called()
 
     def test_24_sync_wrong_venue(self):
         order = self.with_link(make_order(self.event_a))
         self.assertEqual(self.client.post(sync_url(order, venue="b")).status_code, 404)
-        self.search.assert_not_called()
+        self.get.assert_not_called()
 
 
 class OrderDataTests(Base):
@@ -353,7 +420,7 @@ class OrderDataTests(Base):
         def add(n, start):
             for i in range(n):
                 Payment.objects.create(
-                    order=flagged, mp_payment_id=start + i, mp_user_id=USER_A, status="approved",
+                    order=flagged, mp_order_id=f"ORD{start + i}", mp_user_id=USER_A, status="processed",
                     amount=1, outcome=NO_CAPACITY,
                 )
 
@@ -373,15 +440,21 @@ class ReconcileCommandTests(Base):
         ok = make_order(self.event_a, {"general": 1})
         empty = make_order(self.event_a, {"general": 1})
         broken = make_order(self.event_a, {"general": 1})
-        Order.objects.filter(pk__in=[ok.pk, empty.pk, broken.pk]).update(mp_preference_id="pref")
+        Order.objects.filter(pk__in=[ok.pk, empty.pk, broken.pk]).update(mp_order_id="ORDTSTX")
 
-        def search(token, reference):
-            if reference == str(broken.pk):
+        Order.objects.filter(pk=ok.pk).update(mp_order_id="ORDOK")
+        Order.objects.filter(pk=empty.pk).update(mp_order_id="ORDEMPTY")
+        Order.objects.filter(pk=broken.pk).update(mp_order_id="ORDBROKEN")
+
+        def get_order(token, order_id):
+            if order_id == "ORDBROKEN":
                 raise MercadoPagoError(500)
-            return [mp_payment(ok)] if reference == str(ok.pk) else []
+            if order_id == "ORDOK":
+                return mp_order(ok, order_id="ORDOK")
+            return mp_order(empty, order_id="ORDEMPTY", status="created")
 
         out = io.StringIO()
-        with mock.patch("catalog.mp.search_payments", side_effect=search), mock.patch(
+        with mock.patch("catalog.mp.get_order", side_effect=get_order), mock.patch(
             "catalog.mp_connect.get_access_token", side_effect=token_for,
         ):
             call_command("reconcile_mp_payments", stdout=out, stderr=io.StringIO())
@@ -399,13 +472,13 @@ class ReconcileCommandTests(Base):
 class PaymentAdminTests(Base):
     def test_27_admin_isolated_and_read_only(self):
         order_a, order_b = make_order(self.event_a), make_order(self.event_b)
-        process_payment(self.acc_a, mp_payment(order_a, payment_id=1))
-        process_payment(self.acc_b, mp_payment(order_b, user_id=USER_B, payment_id=2))
+        process_order(self.acc_a, mp_order(order_a, order_id="ORD1"))
+        process_order(self.acc_b, mp_order(order_b, user_id=USER_B, order_id="ORD2"))
         user = get_user_model().objects.create_user(username="a-admin", is_staff=True)
         Membership.objects.create(venue=self.venue_a, user=user, role=Membership.Role.ADMIN)
         client = Client()
         client.force_login(user)
         response = client.get(reverse("admin:catalog_payment_changelist"))
         self.assertEqual(response.status_code, 200)
-        self.assertEqual([p.mp_payment_id for p in response.context["cl"].result_list], [1])
+        self.assertEqual([p.mp_order_id for p in response.context["cl"].result_list], ["ORD1"])
         self.assertEqual(client.get(reverse("admin:catalog_payment_add")).status_code, 403)

@@ -151,12 +151,11 @@ El aislamiento de datos por boliche aplica desde la primera entrega. El piloto u
 
 ## Mercado Pago: pago del pedido
 
-El front le pide al backend el link de pago de un pedido con precio y redirige al comprador. El backend crea una preferencia de Checkout Pro con el token del boliche y la comisión de la plataforma (`marketplace_fee`). La confirmación del pago (webhook) va en otro slice.
+El front le pide al backend el link de pago de un pedido con precio y redirige al comprador. El backend crea una order de Checkout Pro (API de Orders, `POST /v1/orders`) con el token del boliche y la comisión de la plataforma (`marketplace_fee`). La confirmación del pago (webhook) va en otro slice.
 
 | Variable | Uso |
 | --- | --- |
-| `PUBLIC_API_URL` | URL pública de este backend; la `notification_url` es `<PUBLIC_API_URL>/api/v1/mercadopago/webhook/` |
-| `FRONT_BASE_URL` | URL pública del front; las `back_urls` son `<FRONT_BASE_URL>/<boliche>/<evento>/pedido/<id>` |
+| `FRONT_BASE_URL` | URL pública del front; `success_url`, `failure_url` y `pending_url` son `<FRONT_BASE_URL>/<boliche>/<evento>/pedido/<id>` |
 
 `POST /api/v1/venues/<boliche>/events/<evento>/orders/<uuid>/payment/` es público (quien tiene el uuid del pedido puede pagar) y no lleva cuerpo. Devuelve `200 { initPoint }`. Si el pedido ya tiene link y sigue vigente devuelve el mismo, sin llamar de nuevo a Mercado Pago.
 
@@ -166,46 +165,47 @@ El front le pide al backend el link de pago de un pedido con precio y redirige a
 | `409 order_already_paid` | El pedido ya está pagado (incluye los pedidos gratis) |
 | `409 order_expired` | La reserva venció |
 | `409 venue_not_connected` | El boliche no tiene una cuenta de Mercado Pago utilizable |
-| `502 mp_unavailable` | Mercado Pago falló al crear la preferencia; no se guarda nada |
-| `503 mp_not_configured` | Falta `PUBLIC_API_URL`, `FRONT_BASE_URL` o la configuración de Mercado Pago |
+| `502 mp_unavailable` | Mercado Pago falló al crear la order, o devolvió una sin `id`, sin `checkout_url` o con otro `total_amount`; no se guarda nada |
+| `503 mp_not_configured` | Falta `FRONT_BASE_URL` o la configuración de Mercado Pago |
 
-Cada ítem de la preferencia es una línea del pedido, con el precio por unidad que paga el comprador (precio más cargo de servicio); la suma da el total del pedido. Solo se manda el email del comprador, nunca el nombre ni el teléfono. La preferencia vence junto con la reserva, excluye los pagos en efectivo (`ticket`, `atm`) y usa `binary_mode` (el pago se aprueba o se rechaza). La comisión de la plataforma es la suma de cantidad por `redondeo(precio × buyer_fee_rate)` de cada ítem, con los precios guardados en el pedido y en los dos modos de cargo del boliche; se guarda en `Order.platform_fee` junto con `mp_preference_id` y `mp_init_point`. Con tasa 0 la preferencia no lleva `marketplace_fee`.
+La order se crea con `type: "online"`, `processing_mode: "manual"` y `capture_mode: "automatic"`. Los montos (`total_amount`, `unit_price`, `marketplace_fee`) viajan como texto con 2 decimales. Cada ítem es una línea del pedido, con el precio por unidad que paga el comprador (precio más cargo de servicio); la suma da el total del pedido. Solo se manda el email del comprador, nunca el nombre ni el teléfono. La order vence junto con la reserva (`expiration_time` en minutos enteros, redondeado hacia arriba, mínimo `PT1M`) y excluye los pagos en efectivo (`config.payment_method.not_allowed_types`: `ticket`, `atm`). No se manda `notification_url`: los avisos se configuran en la aplicación de Mercado Pago. La cabecera `X-Idempotency-Key` es fija por pedido, así un reintento tras un corte de red no crea dos orders. La comisión de la plataforma es la suma de cantidad por `redondeo(precio × buyer_fee_rate)` de cada ítem, con los precios guardados en el pedido y en los dos modos de cargo del boliche; se guarda en `Order.platform_fee` junto con `mp_order_id` (el id `ORD...`) y `mp_init_point` (el `checkout_url`). Con tasa 0 la order no lleva `marketplace_fee`.
 
 ## Mercado Pago: confirmación del pago
 
-Un pago aprobado emite las entradas del pedido una sola vez, lleguen los avisos repetidos o por dos caminos a la vez. Antes de emitir, el backend siempre consulta el pago a Mercado Pago con el token del boliche: nunca confía en el contenido del aviso. **No hay reembolsos**: si el pago llega cuando la reserva venció y no queda cupo, no se emiten entradas y el pago queda registrado para que el boliche lo resuelva a mano.
+Una order pagada emite las entradas del pedido una sola vez, lleguen los avisos repetidos o por dos caminos a la vez. Antes de emitir, el backend siempre consulta la order a Mercado Pago (`GET /v1/orders/<id>`) con el token del boliche: nunca confía en el contenido del aviso. **No hay reembolsos**: si el pago llega cuando la reserva venció y no queda cupo, no se emiten entradas y el pago queda registrado para que el boliche lo resuelva a mano.
 
 | Variable | Uso |
 | --- | --- |
 | `MP_WEBHOOK_SECRET` | Clave secreta de la aplicación (Tus integraciones, Webhooks). Sin ella el webhook responde `503 mp_not_configured` |
 
-En el panel de Mercado Pago hay que suscribir el webhook a los eventos "Pagos" y "Vinculación de aplicaciones" con la URL `<PUBLIC_API_URL>/api/v1/mercadopago/webhook/`.
+En el panel de Mercado Pago hay que suscribir el webhook a los eventos "Order (Mercado Pago)" y "Vinculación de aplicaciones" con la URL `<PUBLIC_API_URL>/api/v1/mercadopago/webhook/` (`PUBLIC_API_URL` solo se usa para armar esa URL en el panel; el backend no la necesita para cobrar).
 
-`POST /api/v1/mercadopago/webhook/` (sin Bearer): valida la firma `x-signature` (HMAC-SHA256 sobre `id:<data.id>;request-id:<x-request-id>;ts:<ts>;`, con el `data.id` de la query) y responde `200 { ok: true }`, sin datos del pedido ni del comprador.
+`POST /api/v1/mercadopago/webhook/` (sin Bearer): valida la firma `x-signature` (HMAC-SHA256 sobre `id:<data.id>;request-id:<x-request-id>;ts:<ts>;`, con el `data.id` de la query; para ids alfanuméricos como `ORD...` Mercado Pago firma el id en minúsculas, y la consulta usa el id tal cual llegó) y responde `200 { ok: true }`, sin datos del pedido ni del comprador.
 
 | Respuesta | Cuándo |
 | --- | --- |
-| `200` | Aviso procesado, o ignorado (otro tipo de aviso, o pago de una cuenta que no conocemos) |
-| `400 invalid_request` | Cuerpo que no es un objeto JSON, o aviso de pago sin `data.id` o `user_id` |
+| `200` | Aviso procesado, o ignorado (otro tipo de aviso, o order de una cuenta que no conocemos) |
+| `400 invalid_request` | Cuerpo que no es un objeto JSON, o aviso de order sin `data.id` o `user_id` |
 | `401 invalid_signature` | Firma ausente, mal formada o distinta; no se consulta nada |
 | `500 mp_unavailable` | Mercado Pago falló o el boliche no tiene token utilizable: Mercado Pago reintenta |
 | `503 mp_not_configured` | Falta `MP_WEBHOOK_SECRET` |
 
-- `type: "payment"`: busca las cuentas con `mp_user_id` igual al `user_id` del aviso (un dueño puede tener varios boliches), consulta el pago con el token de cada una y confirma el pedido en la primera que lo reconoce. Un pago solo confirma pedidos del boliche dueño de la cuenta que lo cobró.
+- `type: "order"`: busca las cuentas con `mp_user_id` igual al `user_id` del aviso (un dueño puede tener varios boliches), consulta la order con el token de cada una y confirma el pedido en la primera que lo reconoce. Una order solo confirma pedidos del boliche dueño de la cuenta que la cobró.
+- `type: "payment"`: se responde `200` sin hacer nada (ya no se usa).
 - `type: "mp-connect"` con `action: "application.deauthorized"`: marca `needs_reconnect` y vence el token de todas las cuentas de ese `user_id`.
 
-Cada pago consultado queda en `Payment` con su `outcome`:
+Cada order consultada queda en `Payment` (`mp_order_id`, y `mp_reference` con la referencia del primer pago para buscarlo en el panel de Mercado Pago) con su `outcome`:
 
 | `outcome` | Significado |
 | --- | --- |
 | `issued` | Aprobado, entradas emitidas |
 | `no_capacity` | Aprobado, pero la reserva venció y no hay cupo. Pagado sin entradas, a revisar |
 | `mismatch` | Aprobado, pero el monto o la moneda no coinciden con el pedido. Sin entradas, a revisar |
-| `duplicate` | Aprobado, pero el pedido ya estaba pagado por otro pago. A revisar |
-| `not_approved` | Cualquier estado que no sea `approved` |
+| `duplicate` | Aprobado, pero el pedido ya estaba pagado por otra order. A revisar |
+| `not_approved` | Cualquier order que no sea `status: processed` con `status_detail: accredited` |
 
-Un pago `issued` que después llega como `refunded` o `charged_back` actualiza su `status` pero conserva `issued`: las entradas no se tocan. El boliche ve los pagos (solo lectura) en el admin, con filtro por resultado. Los pedidos con un pago `no_capacity`, `mismatch` o `duplicate` devuelven `paymentReview: true` para que el front avise al comprador que el boliche tiene que revisar su pago.
+Un pago `issued` que después llega con otro estado (por ejemplo `refunded`) actualiza su `status` pero conserva `issued`: las entradas no se tocan. El boliche ve los pagos (solo lectura) en el admin, con filtro por resultado. Los pedidos con un pago `no_capacity`, `mismatch` o `duplicate` devuelven `paymentReview: true` para que el front avise al comprador que el boliche tiene que revisar su pago.
 
-`POST /api/v1/venues/<boliche>/events/<evento>/orders/<uuid>/payment/sync/` es público y sin cuerpo: para cuando el comprador vuelve de Mercado Pago antes de que llegue el aviso. Si el pedido no está pagado y tiene link, busca los pagos por `external_reference` y los confirma; si Mercado Pago falla devuelve el pedido como esté. Responde `200 { order }` (o `404 not_found`).
+`POST /api/v1/venues/<boliche>/events/<evento>/orders/<uuid>/payment/sync/` es público y sin cuerpo: para cuando el comprador vuelve de Mercado Pago antes de que llegue el aviso. Si el pedido no está pagado y tiene link, consulta la order con su `mp_order_id` y la confirma; si Mercado Pago falla devuelve el pedido como esté. Responde `200 { order }` (o `404 not_found`).
 
-`manage.py reconcile_mp_payments` (cron cada pocos minutos) hace lo mismo con los pedidos sin pagar, con link, de las últimas 48 horas, e imprime cuántos revisó, confirmó y falló.
+`manage.py reconcile_mp_payments` (cron cada pocos minutos) hace lo mismo con los pedidos sin pagar, con order, de las últimas 48 horas, e imprime cuántos revisó, confirmó y falló.

@@ -1,7 +1,7 @@
 """Confirmación del pago: consulta a Mercado Pago, emisión de entradas y avisos (webhook).
 
-Reglas: nunca se confía en el contenido del aviso (siempre se consulta el pago con el token
-del boliche), un pago emite las entradas una sola vez y no hay reembolsos: lo que no se
+Reglas: nunca se confía en el contenido del aviso (siempre se consulta la order con el token
+del boliche), una order emite las entradas una sola vez y no hay reembolsos: lo que no se
 puede emitir queda registrado como "a revisar" para que el boliche lo resuelva a mano.
 """
 
@@ -47,18 +47,18 @@ def _int(value):
         return None
 
 
-def process_payment(account, payment):
-    """Registra un pago de Mercado Pago y, si corresponde, emite las entradas del pedido.
+def process_order(account, mp_order):
+    """Registra una order de Mercado Pago y, si corresponde, emite las entradas del pedido.
 
-    `account` es la cuenta con cuyo token se consultó el pago y `payment` lo que devolvió
-    Mercado Pago. Devuelve el `Payment` guardado o None si el pago no es de un pedido de
+    `account` es la cuenta con cuyo token se consultó la order y `mp_order` lo que devolvió
+    Mercado Pago. Devuelve el `Payment` guardado o None si la order no es de un pedido de
     ese boliche (en ese caso no guarda nada).
     """
-    mp_payment_id = _int(payment.get("id"))
-    if mp_payment_id is None or _int(payment.get("collector_id")) != account.mp_user_id:
+    mp_order_id = str(mp_order.get("id") or "")[:64]
+    if not mp_order_id or str(mp_order.get("user_id")) != str(account.mp_user_id):
         return None
     try:
-        order_id = UUID(str(payment.get("external_reference")))
+        order_id = UUID(str(mp_order.get("external_reference")))
     except ValueError:
         return None
     with transaction.atomic():
@@ -69,34 +69,46 @@ def process_payment(account, payment):
         )
         if order is None:
             return None
-        record = Payment.objects.filter(mp_payment_id=mp_payment_id).first()
+        record = Payment.objects.filter(mp_order_id=mp_order_id).first()
         if record is not None and record.order_id != order.pk:
             return None
-        amount = _money(payment.get("transaction_amount"))
+        paid_amount = mp_order.get("total_paid_amount")
+        amount = _money(paid_amount if paid_amount not in (None, "") else mp_order.get("total_amount"))
         if record is None:
-            record = Payment(order=order, mp_payment_id=mp_payment_id, mp_user_id=account.mp_user_id)
-        record.status = str(payment.get("status") or "")[:30]
-        record.status_detail = str(payment.get("status_detail") or "")[:100]
+            record = Payment(order=order, mp_order_id=mp_order_id, mp_user_id=account.mp_user_id)
+        record.status = str(mp_order.get("status") or "")[:30]
+        record.status_detail = str(mp_order.get("status_detail") or "")[:100]
         record.amount = amount if amount is not None else Decimal(0)
-        if record.status != "approved":
+        record.mp_reference = _reference(mp_order)
+        approved = record.status == "processed" and record.status_detail == "accredited"
+        if not approved:
             if record.outcome != Outcome.ISSUED:
                 record.outcome = Outcome.NOT_APPROVED
         elif record.outcome != Outcome.ISSUED:
-            record.outcome = _approved_outcome(order, record, amount, payment)
+            record.outcome = _approved_outcome(order, record, amount, mp_order)
         record.save()
         return record
 
 
-def _approved_outcome(order, record, amount, payment):
+def _reference(mp_order):
+    transactions = mp_order.get("transactions")
+    payments = transactions.get("payments") if isinstance(transactions, dict) else None
+    first = payments[0] if isinstance(payments, list) and payments else None
+    reference = first.get("reference") if isinstance(first, dict) else None
+    value = reference.get("id") if isinstance(reference, dict) else None
+    return str(value)[:100] if value not in (None, "") else ""
+
+
+def _approved_outcome(order, record, amount, mp_order):
     total = sum(
         (item.quantity * (item.unit_price + item.unit_service_fee) for item in order.items.all()),
         Decimal(0),
     ).quantize(CENT)
-    if payment.get("currency_id") != "ARS" or amount != total:
+    if mp_order.get("currency") != "ARS" or amount != total:
         return Outcome.MISMATCH
     if (
         order.paid_at is not None
-        and order.payments.filter(outcome=Outcome.ISSUED).exclude(mp_payment_id=record.mp_payment_id).exists()
+        and order.payments.filter(outcome=Outcome.ISSUED).exclude(mp_order_id=record.mp_order_id).exists()
     ):
         return Outcome.DUPLICATE
     try:
@@ -107,12 +119,12 @@ def _approved_outcome(order, record, amount, payment):
 
 
 def sync_order(order):
-    """Busca en Mercado Pago los pagos de un pedido sin pagar y los confirma.
+    """Consulta en Mercado Pago la order de un pedido sin pagar y la confirma.
 
     Devuelve "skipped" (nada que consultar), "confirmed" (el pedido quedó pagado),
     "pending" (consultado, sigue sin pagar) o "failed" (Mercado Pago o el token fallaron).
     """
-    if order.paid_at is not None or not order.mp_preference_id:
+    if order.paid_at is not None or not order.mp_order_id:
         return "skipped"
     venue = order.event.venue
     account = MercadoPagoAccount.objects.filter(venue=venue).first()
@@ -120,11 +132,10 @@ def sync_order(order):
         return "failed"
     try:
         access_token = mp_connect.get_access_token(venue)
-        payments = mp.search_payments(access_token, str(order.pk))
+        mp_order = mp.get_order(access_token, order.mp_order_id)
     except (mp_connect.MercadoPagoNotConnected, mp.MercadoPagoError):
         return "failed"
-    for payment in payments:
-        process_payment(account, payment)
+    process_order(account, mp_order)
     return "confirmed" if Order.objects.filter(pk=order.pk, paid_at__isnull=False).exists() else "pending"
 
 
@@ -142,18 +153,18 @@ def _body(request):
     return data if isinstance(data, dict) else None
 
 
-def _confirm_payment(payment_id, user_id):
-    """True si todo salió bien (o el pago no es nuestro); False si hay que reintentar."""
+def _confirm_order(order_id, user_id):
+    """True si todo salió bien (o la order no es nuestra); False si hay que reintentar."""
     accounts = MercadoPagoAccount.objects.filter(mp_user_id=user_id).select_related("venue").order_by("pk")
     failed = False
     for account in accounts:
         try:
             access_token = mp_connect.get_access_token(account.venue)
-            payment = mp.get_payment(access_token, payment_id)
+            mp_order = mp.get_order(access_token, order_id)
         except (mp_connect.MercadoPagoNotConnected, mp.MercadoPagoError):
             failed = True
             continue
-        if process_payment(account, payment) is not None:
+        if process_order(account, mp_order) is not None:
             return True
     return not failed
 
@@ -165,21 +176,20 @@ def webhook(request):
     if not settings.MP_WEBHOOK_SECRET:
         return _json_error("mp_not_configured", 503)
     data_id = request.GET.get("data.id")
-    if data_id is not None and not data_id.isdigit():
-        data_id = data_id.lower()
+    signed_id = data_id.lower() if data_id is not None else None  # MP firma los ids alfanuméricos en minúsculas
     if not mp.webhook_signature_is_valid(
-        request.headers.get("x-signature"), request.headers.get("x-request-id"), data_id,
+        request.headers.get("x-signature"), request.headers.get("x-request-id"), signed_id,
     ):
         return _json_error("invalid_signature", 401)
     body = _body(request)
     if body is None:
         return _json_error("invalid_request", 400)
     kind = body.get("type")
-    if kind == "payment":
+    if kind == "order":
         user_id = _int(body.get("user_id"))
-        if not data_id or not data_id.isdigit() or user_id is None:
+        if not data_id or user_id is None:
             return _json_error("invalid_request", 400)
-        if not _confirm_payment(data_id, user_id):
+        if not _confirm_order(data_id, user_id):
             return _json_error("mp_unavailable", 500)
     elif kind == "mp-connect" and body.get("action") == "application.deauthorized":
         user_id = _int(body.get("user_id"))
