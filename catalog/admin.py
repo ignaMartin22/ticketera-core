@@ -2,7 +2,7 @@ from django import forms
 from django.contrib import admin, messages
 from django.utils import timezone
 
-from .models import Event, Membership, Order, Ticket, TicketType, Venue
+from .models import Event, Membership, Order, Payment, Ticket, TicketType, Venue
 from .orders import OrderConflict
 from .tickets import issue_tickets
 
@@ -146,6 +146,42 @@ class OrderAdmin(admin.ModelAdmin):
                 issued += 1
         if issued:
             self.message_user(request, f"Entradas emitidas en {issued} pedido(s).", level=messages.SUCCESS)
+
+
+@admin.register(Payment)
+class PaymentAdmin(admin.ModelAdmin):
+    list_display = ["order", "event", "buyer", "amount", "status", "outcome", "created_at"]
+    list_select_related = ["order", "order__event"]
+    list_filter = ["outcome"]
+    actions = None
+
+    def has_module_permission(self, request):
+        return managed_venues(request.user).exists()
+
+    def has_view_permission(self, request, obj=None):
+        if obj is None:
+            return self.has_module_permission(request)
+        return managed_venues(request.user).filter(pk=obj.order.event.venue_id).exists()
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).filter(order__event__venue__in=managed_venues(request.user))
+
+    @admin.display(description="Evento", ordering="order__event")
+    def event(self, obj):
+        return obj.order.event
+
+    @admin.display(description="Comprador", ordering="order__buyer_name")
+    def buyer(self, obj):
+        return obj.order.buyer_name
 
 
 class AttendedFilter(admin.SimpleListFilter):

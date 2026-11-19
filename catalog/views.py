@@ -12,7 +12,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST, require_safe
 
-from .models import Event, Order, TicketType, Venue
+from .models import Event, Order, Payment, TicketType, Venue
 from .orders import MAX_TICKETS_PER_ORDER, OrderConflict, reserve_order
 from .qr import sign_ticket
 
@@ -124,6 +124,9 @@ def order_data(order, items):
             for item in items
         ],
         "tickets": tickets,
+        "paymentReview": order.payments.filter(
+            outcome__in=[Payment.Outcome.NO_CAPACITY, Payment.Outcome.MISMATCH, Payment.Outcome.DUPLICATE],
+        ).exists(),
     }
 
 

@@ -168,6 +168,30 @@ class Ticket(models.Model):
         ordering = ["created_at", "pk"]
 
 
+class Payment(models.Model):
+    """Pago de Mercado Pago asociado a un pedido, con lo que hicimos al confirmarlo."""
+
+    class Outcome(models.TextChoices):
+        ISSUED = "issued", "Aprobado, entradas emitidas"
+        NO_CAPACITY = "no_capacity", "Pagado sin entradas: la reserva venció y no hay cupo (a revisar)"
+        MISMATCH = "mismatch", "Aprobado, pero el monto o la moneda no coinciden (a revisar)"
+        DUPLICATE = "duplicate", "Aprobado, pero el pedido ya estaba pagado por otro pago (a revisar)"
+        NOT_APPROVED = "not_approved", "No aprobado"
+
+    order = models.ForeignKey(Order, on_delete=models.PROTECT, related_name="payments")
+    mp_payment_id = models.BigIntegerField(unique=True)
+    mp_user_id = models.BigIntegerField()
+    status = models.CharField(max_length=30)
+    status_detail = models.CharField(max_length=100, blank=True)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    outcome = models.CharField(max_length=12, choices=Outcome)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+
+
 class DoorLoginFailure(models.Model):
     """Intento fallido de login de portería, para limitar los reintentos por usuario."""
 

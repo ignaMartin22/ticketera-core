@@ -7,6 +7,7 @@ from django.conf import settings
 from mercadopago import SDK
 from mercadopago.config.request_options import RequestOptions
 from mercadopago.errors.exceptions import MercadoPagoError as SdkError
+from mercadopago.webhook.validator import InvalidWebhookSignatureError, WebhookSignatureValidator
 
 TIMEOUT_SECONDS = 10.0
 
@@ -64,6 +65,39 @@ def refresh_tokens(refresh_token):
         "refresh_token": refresh_token,
     }
     return _call(_oauth().refresh, body)
+
+
+def _payments(access_token):
+    options = RequestOptions(connection_timeout=TIMEOUT_SECONDS, max_retries=0)
+    return SDK(access_token, request_options=options).payment()
+
+
+def get_payment(access_token, payment_id):
+    """Consulta un pago con el access token del boliche que lo cobró."""
+    payment = _payments(access_token)
+    return _call(lambda _: payment.get(payment_id), None)
+
+
+def search_payments(access_token, external_reference):
+    """Pagos con ese external_reference, consultados con el access token del boliche."""
+    payment = _payments(access_token)
+    response = _call(lambda _: payment.search({"external_reference": external_reference}), None)
+    results = response.get("results")
+    if not isinstance(results, list):
+        raise MercadoPagoError(200, response)
+    return [result for result in results if isinstance(result, dict)]
+
+
+def webhook_signature_is_valid(x_signature, x_request_id, data_id):
+    """Valida la firma del aviso con la clave de la aplicación. Nunca levanta."""
+    secret = settings.MP_WEBHOOK_SECRET
+    if not secret or not x_signature:
+        return False
+    try:
+        WebhookSignatureValidator.validate(x_signature, x_request_id, data_id, secret)
+    except (InvalidWebhookSignatureError, ValueError, TypeError, AttributeError):
+        return False
+    return True
 
 
 def create_preference(access_token, body):
