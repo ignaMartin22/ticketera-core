@@ -3,7 +3,6 @@ from decimal import Decimal
 from uuid import uuid4
 
 from django.contrib.auth import get_user_model
-from django.core.cache import cache
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -24,7 +23,6 @@ class BackofficeTests(TestCase):
 
     def setUp(self):
         self.client.force_login(self.root)
-        cache.clear()  # el límite por IP de orders cuenta todos los POST del proceso
 
     def fees(self, mode="buyer", buyer="10", platform="5", note=""):
         return {"fee_mode": mode, "buyer_fee_percent": buyer, "platform_fee_percent": platform, "note": note}

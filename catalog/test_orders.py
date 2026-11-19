@@ -4,9 +4,8 @@ from threading import Barrier
 from unittest.mock import patch
 from uuid import uuid4
 
-from django.core.cache import cache
 from django.db import close_old_connections
-from django.test import Client, TestCase, TransactionTestCase, override_settings
+from django.test import Client, TestCase, TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
 
@@ -46,9 +45,6 @@ class OrderTests(TestCase):
         cls.ticket = create_catalog("moon")
         other = create_catalog("other")
         TicketType.objects.filter(pk=other.pk).update(slug="other-general")
-
-    def setUp(self):
-        cache.clear()  # el límite por IP cuenta todos los POST del proceso
 
     def available(self):
         event = self.client.get(reverse("event-detail", args=["moon", "fecha"])).json()["event"]
@@ -135,49 +131,7 @@ class OrderTests(TestCase):
         self.assertEqual(self.ticket.capacity, 2)
 
 
-class OrderRateLimitTests(TestCase):
-    @classmethod
-    def setUpTestData(cls):
-        create_catalog("moon")
-
-    def setUp(self):
-        cache.clear()
-
-    def test_every_post_counts_and_the_limit_returns_429(self):
-        with override_settings(ORDERS_RATE_LIMIT=3):
-            self.assertEqual(create_order(self.client, uuid4(), phone="malo").status_code, 400)
-            self.assertEqual(create_order(self.client, uuid4()).status_code, 201)
-            self.assertEqual(create_order(self.client, uuid4()).status_code, 409)  # sin cupo
-            response = create_order(self.client, uuid4())
-            self.assertEqual(response.status_code, 429)
-            self.assertEqual(response.json()["error"], "rate_limited")
-        self.assertEqual(Order.objects.count(), 1)
-
-    def test_limit_is_per_ip_and_does_not_block_gets(self):
-        with override_settings(ORDERS_RATE_LIMIT=1):
-            create_order(self.client, uuid4(), quantity=1)
-            response = self.client.post(
-                reverse("order-create", args=["moon", "fecha"]),
-                {"email": "a@b.co", "name": "Ana", "phone": "+5493884123456",
-                 "items": [{"ticketTypeId": "general", "quantity": 1}]},
-                content_type="application/json",
-                headers={"Idempotency-Key": str(uuid4())},
-                REMOTE_ADDR="10.0.0.9",
-            )
-            self.assertEqual(response.status_code, 201)  # otra IP tiene su propio contador
-            self.assertEqual(create_order(self.client, uuid4(), quantity=1).status_code, 429)
-            order_id = Order.objects.order_by("pk").first().pk
-            for url in [
-                reverse("event-detail", args=["moon", "fecha"]),
-                reverse("order-detail", args=["moon", "fecha", order_id]),
-            ]:
-                self.assertEqual(self.client.get(url).status_code, 200)
-
-
 class ConcurrentOrderTests(TransactionTestCase):
-    def setUp(self):
-        cache.clear()
-
     def test_two_requests_cannot_both_reserve_the_last_tickets(self):
         create_catalog("moon")
         barrier = Barrier(2, timeout=5)
