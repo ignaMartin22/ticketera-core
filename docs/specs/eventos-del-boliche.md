@@ -83,7 +83,7 @@ Las tandas (1ª, 2ª…) son tipos de entrada distintos con su propio precio y c
 
 - Solo se puede eliminar una fecha **sin entradas vendidas**. Con ventas, se pausa la venta.
 - Pide confirmación: la fecha no se puede recuperar.
-- Hoy en el admin de Django solo el superusuario puede borrar. Los pedidos protegen la fecha a nivel base (`PROTECT`): una fecha con pedidos no se borra.
+- En el admin del core el superusuario borra siempre; el administrador del boliche, solo fechas y tipos de entrada sin ventas. Los pedidos protegen la fecha a nivel base (`PROTECT`): una fecha con pedidos no se borra.
 
 ### Listado y resumen
 
