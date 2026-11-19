@@ -1,3 +1,4 @@
+from datetime import timedelta
 from decimal import Decimal
 from uuid import uuid4
 
@@ -6,7 +7,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from catalog.models import Event, FeeChange, Membership, OrderItem, TicketType, Venue, VenueIntegration
+from catalog.models import Event, FeeChange, Membership, Order, OrderItem, TicketType, Venue, VenueIntegration
 
 User = get_user_model()
 
@@ -31,7 +32,8 @@ class BackofficeTests(TestCase):
         response = self.client.get(reverse("backoffice:venue-list"))
         self.assertRedirects(response, f"{reverse('backoffice:login')}?next={reverse('backoffice:venue-list')}")
         self.client.force_login(self.venue_admin)
-        for name, args in [("venue-list", []), ("venue-detail", ["moon"]), ("venue-fees", ["moon"])]:
+        for name, args in [("venue-list", []), ("venue-detail", ["moon"]), ("venue-fees", ["moon"]),
+                           ("venue-orders", ["moon"])]:
             self.assertEqual(self.client.get(reverse(f"backoffice:{name}", args=args)).status_code, 403)
         response = self.client.post(reverse("backoffice:venue-fees", args=["moon"]), self.fees(platform="0"))
         self.assertEqual(response.status_code, 403)
@@ -40,7 +42,8 @@ class BackofficeTests(TestCase):
     def test_every_page_renders(self):
         Event.objects.create(venue=self.venue, slug="fecha", title="Fecha", starts_at=timezone.now(), is_published=True)
         pages = [("venue-list", []), ("venue-create", [])] + [
-            (name, ["moon"]) for name in ["venue-detail", "venue-edit", "venue-fees", "venue-team", "venue-integrations"]
+            (name, ["moon"])
+            for name in ["venue-detail", "venue-edit", "venue-fees", "venue-team", "venue-integrations", "venue-orders"]
         ]
         for name, args in pages:
             with self.subTest(name):
@@ -121,6 +124,16 @@ class BackofficeTests(TestCase):
         self.client.post(reverse("backoffice:venue-toggle", args=["moon"]))
         self.assertEqual(self.client.get(reverse("event-list", args=["moon"])).status_code, 200)
 
+    def test_toggle_records_who_changed_the_status(self):
+        self.client.post(reverse("backoffice:venue-toggle", args=["moon"]))
+        change = self.venue.status_changes.get()
+        self.assertEqual((change.changed_by, change.is_active), (self.root, False))
+        self.client.post(reverse("backoffice:venue-toggle", args=["moon"]))
+        self.assertEqual(self.venue.status_changes.count(), 2)
+        self.assertTrue(self.venue.status_changes.first().is_active)
+        response = self.client.get(reverse("backoffice:venue-detail", args=["moon"]))
+        self.assertContains(response, "root@example.com")
+
     def test_integrations_show_every_provider(self):
         VenueIntegration.objects.create(venue=self.venue, provider="mercadopago", status="connected",
                                         account_label="moon@mp.test")
@@ -129,3 +142,54 @@ class BackofficeTests(TestCase):
         self.assertEqual(statuses, {"mercadopago": "connected", "whatsapp": "disconnected", "email": "disconnected"})
         self.assertContains(response, "moon@mp.test")
         self.assertFalse(VenueIntegration.objects.filter(venue=self.venue, provider="whatsapp").exists())
+
+    def order(self, event, ticket, expires=timedelta(minutes=10), quantity=2, email="ana@x.co"):
+        """Un pedido reservado con un solo ítem, como sale del checkout."""
+        order = Order.objects.create(
+            event=event, buyer_email=email, buyer_name="Ana", buyer_phone="+5493884123456",
+            idempotency_key=uuid4(), expires_at=timezone.now() + expires,
+        )
+        OrderItem.objects.create(
+            order=order, ticket_type=ticket, ticket_slug=ticket.slug, quantity=quantity,
+            unit_price=ticket.price, unit_service_fee="100",
+        )
+        return order
+
+    def test_orders_lists_buyers_status_and_totals(self):
+        event = Event.objects.create(venue=self.venue, slug="fecha", title="Fecha", starts_at=timezone.now(),
+                                     is_published=True)
+        ticket = TicketType.objects.create(event=event, slug="general", name="General", price="1000", capacity=10)
+        order = self.order(event, ticket)
+        self.order(event, ticket, expires=timedelta(minutes=-1), email="vieja@x.co")
+        other = Event.objects.create(venue=self.other, slug="fecha", title="Fecha", starts_at=timezone.now())
+        self.order(other, TicketType.objects.create(event=other, slug="general", name="General", price="500",
+                                                    capacity=5), email="otra@x.co")
+
+        response = self.client.get(reverse("backoffice:venue-orders", args=["moon"]))
+        self.assertEqual(response.status_code, 200)
+        rows = {row.pk: row for row in response.context["orders"]}
+        self.assertEqual(len(rows), 2)
+        self.assertEqual((rows[order.pk].tickets, rows[order.pk].total), (2, Decimal("2200")))
+        self.assertContains(response, "ana@x.co")
+        self.assertContains(response, "+5493884123456")
+        self.assertContains(response, "Pendiente de pago")
+        self.assertContains(response, "Vencido")
+        self.assertContains(response, "$ 2.200,00")
+        self.assertNotContains(response, "otra@x.co")
+
+    def test_sales_report_sums_per_event_and_ticket_type(self):
+        event = Event.objects.create(venue=self.venue, slug="fecha", title="Fecha", starts_at=timezone.now(),
+                                     is_published=True)
+        general = TicketType.objects.create(event=event, slug="general", name="General", price="1000", capacity=10,
+                                            sold=3)
+        vip = TicketType.objects.create(event=event, slug="vip", name="VIP", price="2500", capacity=4, sold=2)
+        self.order(event, general)                                # reserva vigente
+        self.order(event, vip, expires=timedelta(minutes=-1))     # vencida: no suma
+
+        response = self.client.get(reverse("backoffice:venue-orders", args=["moon"]))
+        row = response.context["sales"][0]
+        self.assertEqual((row["sold"], row["reserved"], row["capacity"]), (5, 2, 14))
+        self.assertEqual(row["revenue"], Decimal("8000"))  # 3 × $1000 + 2 × $2500, a precio de entrada
+        self.assertEqual(row["occupancy"], 36)
+        self.assertContains(response, "VIP: 2/4")
+        self.assertContains(response, "$ 8.000,00")

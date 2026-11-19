@@ -23,6 +23,7 @@
 </div>
 <nav class="tabs" aria-label="Secciones del boliche">
   <a href="{% url 'backoffice:venue-detail' venue.slug %}"{% if tab == "summary" %} aria-current="page"{% endif %}>Resumen</a>
+  <a href="{% url 'backoffice:venue-orders' venue.slug %}"{% if tab == "orders" %} aria-current="page"{% endif %}>Ventas</a>
   <a href="{% url 'backoffice:venue-edit' venue.slug %}"{% if tab == "edit" %} aria-current="page"{% endif %}>Datos</a>
   <a href="{% url 'backoffice:venue-fees' venue.slug %}"{% if tab == "fees" %} aria-current="page"{% endif %}>Comisión</a>
   <a href="{% url 'backoffice:venue-team' venue.slug %}"{% if tab == "team" %} aria-current="page"{% endif %}>Equipo</a>
