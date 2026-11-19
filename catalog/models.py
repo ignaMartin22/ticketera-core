@@ -163,3 +163,10 @@ class Ticket(models.Model):
 
     class Meta:
         ordering = ["created_at", "pk"]
+
+
+class DoorLoginFailure(models.Model):
+    """Intento fallido de login de portería, para limitar los reintentos por usuario."""
+
+    username = models.CharField(max_length=150, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
