@@ -14,6 +14,8 @@ def managed_venues(user):
     # tiene membresías, el catálogo igual queda limitado a sus boliches.
     if user.is_superuser:
         return Venue.objects.all()
+    if not user.is_authenticated:
+        return Venue.objects.none()
     return Venue.objects.filter(memberships__user=user, memberships__role=Membership.Role.ADMIN)
 
 
