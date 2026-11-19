@@ -5,6 +5,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from .models import Event, Order, OrderItem, TicketType, Venue
+from .tickets import issue_tickets
 
 MAX_TICKETS_PER_ORDER = 10
 RESERVATION_DURATION = timedelta(minutes=10)
@@ -66,4 +67,7 @@ def reserve_order(venue_slug, event_slug, buyer, quantities, idempotency_key):
         for ticket in ticket_types
     ]
     OrderItem.objects.bulk_create(items)
+    if all(item.unit_price + item.unit_service_fee == 0 for item in items):
+        issue_tickets(order.pk)
+        order.refresh_from_db()
     return order, items, True

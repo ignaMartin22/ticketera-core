@@ -1,8 +1,10 @@
 from django import forms
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.utils import timezone
 
-from .models import Event, Membership, TicketType, Venue
+from .models import Event, Membership, Order, TicketType, Venue
+from .orders import OrderConflict
+from .tickets import issue_tickets
 
 
 admin.site.register(Venue)
@@ -91,3 +93,56 @@ class TicketTypeAdmin(VenueCatalogAdmin):
                 venue__in=managed_venues(request.user),
             ).select_related("venue")
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+
+@admin.register(Order)
+class OrderAdmin(admin.ModelAdmin):
+    list_display = ["event", "buyer_name", "buyer_email", "buyer_phone", "status", "created_at"]
+    list_select_related = ["event", "event__venue"]
+    actions = ["mark_paid_and_issue"]
+
+    def has_module_permission(self, request):
+        return managed_venues(request.user).exists()
+
+    def has_view_permission(self, request, obj=None):
+        if obj is None:
+            return self.has_module_permission(request)
+        return managed_venues(request.user).filter(pk=obj.event.venue_id).exists()
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).filter(event__venue__in=managed_venues(request.user))
+
+    def get_actions(self, request):
+        actions = super().get_actions(request)
+        actions.pop("delete_selected", None)
+        return actions
+
+    @admin.display(description="Estado")
+    def status(self, obj):
+        if obj.paid_at is not None:
+            return "Pagado"
+        return "Pendiente" if obj.expires_at > timezone.now() else "Vencido"
+
+    @admin.action(description="Marcar como pagado y emitir entradas", permissions=["view"])
+    def mark_paid_and_issue(self, request, queryset):
+        issued = 0
+        for order in queryset:
+            try:
+                issue_tickets(order.pk)
+            except OrderConflict:
+                self.message_user(
+                    request, f"Sin cupo para emitir el pedido {order.pk}.", level=messages.ERROR,
+                )
+            else:
+                issued += 1
+        if issued:
+            self.message_user(request, f"Entradas emitidas en {issued} pedido(s).", level=messages.SUCCESS)
