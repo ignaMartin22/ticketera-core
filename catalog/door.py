@@ -1,12 +1,7 @@
 """API de portería: login del personal de puerta y escaneo de entradas."""
 
-import json
-from datetime import timedelta
 from functools import wraps
 
-from django.contrib.auth import authenticate, get_user_model
-from django.core import signing
-from django.core.exceptions import RequestDataTooBig
 from django.db.models import Count, Q
 from django.http import JsonResponse
 from django.utils import timezone
@@ -14,124 +9,44 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST, require_safe
 
-from .models import DoorLoginFailure, Event, Membership, Ticket, Venue
+from .models import Event, Membership, Ticket, Venue
 from .qr import InvalidTicketToken, verify_ticket
+from .staff_auth import (  # noqa: F401  (LOGIN_MAX_FAILURES se reexporta: lo importan los tests)
+    LOGIN_MAX_FAILURES, TOKEN_MAX_AGE, error, issue_token, json_body, login_user,
+    venue_staff_view,
+)
 
-TOKEN_SALT = "catalog.door-token"
-TOKEN_MAX_AGE = 12 * 60 * 60
-MAX_BODY_BYTES = 8192
-LOGIN_MAX_FAILURES = 10
-LOGIN_FAILURE_WINDOW = timedelta(minutes=15)
-LOGIN_FAILURE_RETENTION = timedelta(hours=24)
 DOOR_ROLES = (Membership.Role.DOOR, Membership.Role.ADMIN)
-
-
-def error(code, status):
-    return JsonResponse({"error": code}, status=status)
-
-
-def json_body(request):
-    """Devuelve (datos, respuesta_de_error); exactamente uno de los dos es None."""
-    if request.content_type != "application/json":
-        return None, error("expected_json", 415)
-    try:
-        body = request.body
-        if len(body) > MAX_BODY_BYTES:
-            raise RequestDataTooBig
-        data = json.loads(body)
-    except RequestDataTooBig:
-        return None, error("request_too_large", 413)
-    except (ValueError, RecursionError):
-        return None, error("invalid_request", 400)
-    if not isinstance(data, dict):
-        return None, error("invalid_request", 400)
-    return data, None
-
-
-def user_from_request(request):
-    header = request.headers.get("Authorization", "")
-    scheme, _, token = header.partition(" ")
-    if scheme != "Bearer" or not token:
-        return None
-    try:
-        payload = signing.loads(token, salt=TOKEN_SALT, max_age=TOKEN_MAX_AGE)
-        uid = payload["uid"]
-        return get_user_model().objects.filter(pk=uid, is_active=True).first()
-    except (signing.BadSignature, KeyError, TypeError, ValueError):
-        return None
 
 
 def door_venue_view(view):
     """Autentica con el token y exige rol door/admin en el boliche de la URL."""
 
     @wraps(view)
-    def wrapper(request, venue_slug, *args, **kwargs):
-        user = user_from_request(request)
-        if user is None:
-            return error("unauthorized", 401)
-        venue = Venue.objects.filter(
-            slug=venue_slug, is_active=True,
-            memberships__user=user, memberships__role__in=DOOR_ROLES,
-        ).first()
-        if venue is None:
-            return error("not_found", 404)
+    def adapted(request, venue, user, membership, *args, **kwargs):
         return view(request, venue, user, *args, **kwargs)
 
-    return wrapper
+    return venue_staff_view(*DOOR_ROLES)(adapted)
 
 
 def event_summary(event):
     return {"slug": event.slug, "title": event.title, "startsAt": event.starts_at.isoformat()}
 
 
-def login_retry_after(key):
-    """Segundos de espera si el usuario agotó sus intentos; 0 si puede intentar."""
-    now = timezone.now()
-    recent = list(
-        DoorLoginFailure.objects.filter(username=key, created_at__gt=now - LOGIN_FAILURE_WINDOW)
-        .order_by("-created_at").values_list("created_at", flat=True)[:LOGIN_MAX_FAILURES]
-    )
-    if len(recent) < LOGIN_MAX_FAILURES:
-        return 0
-    wait = recent[-1] + LOGIN_FAILURE_WINDOW - now
-    return max(1, int(wait.total_seconds()) + 1)
-
-
-def record_login_failure(key):
-    DoorLoginFailure.objects.create(username=key)
-    DoorLoginFailure.objects.filter(created_at__lt=timezone.now() - LOGIN_FAILURE_RETENTION).delete()
-
-
 @csrf_exempt
 @require_POST
 @never_cache
 def login(request):
-    data, failure = json_body(request)
+    user, failure = login_user(request)
     if failure:
         return failure
-    username, password = data.get("username"), data.get("password")
-    user = None
-    key = None
-    if isinstance(username, str) and isinstance(password, str):
-        key = username.strip().lower()[:150]
-        retry_after = login_retry_after(key)
-        if retry_after:
-            response = JsonResponse({"error": "too_many_attempts", "retryAfter": retry_after}, status=429)
-            response["Retry-After"] = str(retry_after)
-            return response
-        user = authenticate(request, username=username, password=password)
-    if user is None or not user.is_active:
-        if key is not None:
-            record_login_failure(key)
-        return error("invalid_credentials", 401)
-    DoorLoginFailure.objects.filter(username=key).delete()
     venues = Venue.objects.filter(
         is_active=True, memberships__user=user, memberships__role__in=DOOR_ROLES,
     ).distinct().order_by("slug")
     if not venues:
         return error("not_door_staff", 403)
     return JsonResponse({
-        "token": signing.dumps({"uid": user.pk}, salt=TOKEN_SALT),
+        "token": issue_token(user),
         "expiresIn": TOKEN_MAX_AGE,
         "venues": [{"slug": venue.slug, "name": venue.name} for venue in venues],
     })
