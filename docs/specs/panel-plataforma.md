@@ -18,6 +18,7 @@ Junto con el `/admin/` de Django, es la administración del core, y la usa solo 
 | `/plataforma/entrar/` | Ingreso |
 | `/plataforma/boliches/nuevo/` | Alta de boliche |
 | `/plataforma/boliches/<slug>/` | Resumen |
+| `/plataforma/boliches/<slug>/pedidos/` | Ventas y pedidos |
 | `/plataforma/boliches/<slug>/datos/` | Datos y marca |
 | `/plataforma/boliches/<slug>/comision/` | Comisión e historial |
 | `/plataforma/boliches/<slug>/equipo/` | Equipo |
@@ -39,7 +40,14 @@ Una tarjeta por boliche con: nombre, slug, ciudad, color, estado (activo o pausa
 - **Para empezar a vender:** datos y marca (dirección y logo), comisión definida, administrador asignado, Mercado Pago conectado y una fecha publicada.
 - **Números:** entradas vendidas, reservas vigentes, cargo al comprador y comisión.
 - **Próximas fechas:** hasta 6, desde 12 horas antes de ahora, con estado y vendidas sobre cupo. El botón "Editar catálogo" lleva al `/admin/` del core filtrado por el boliche, para que la plataforma cargue fechas mientras el dashboard del boliche no esté conectado.
-- **Activar o pausar:** pausar pide confirmación. **Debe:** pausar saca al boliche de la API pública al instante, y activarlo lo vuelve a mostrar.
+- **Historial de estado:** los últimos 5 cambios entre activo y pausado, con quién los hizo y cuándo.
+- **Activar o pausar:** pausar pide confirmación. **Debe:** pausar saca al boliche de la API pública al instante, y activarlo lo vuelve a mostrar. **Debe:** cada cambio queda registrado con el usuario y la hora.
+
+### Ventas
+
+- **Ventas por fecha:** una fila por fecha del boliche, publicadas y borradores, pasadas y próximas, de la más nueva a la más vieja. Cada fila muestra vendidas, reservas vigentes, cupo, ocupación, recaudación y el detalle por tipo de entrada (vendidas sobre cupo).
+- La recaudación es a precio de entrada, sin cargo de servicio ni comisión (ver [ABM de eventos](eventos-del-boliche.md#listado-y-resumen)). Pendiente: con pagos reales, sale de los pedidos pagados.
+- **Pedidos:** los últimos 100, del más nuevo al más viejo, con fecha, evento, comprador (nombre, email y teléfono), estado — pendiente de pago o vencido según la reserva siga vigente —, cantidad de entradas y total con cargo de servicio.
 
 ### Datos
 
@@ -76,6 +84,4 @@ Una tarjeta por proveedor con estado, cuenta vinculada, fechas y último error. 
 ## Pendiente
 
 - Botón "Conectar Mercado Pago" con OAuth.
-- Pedidos, compradores y reporte de ventas por boliche.
-- Registro de quién activó o pausó un boliche.
 - Probar el ancho de celular en un navegador real.

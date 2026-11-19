@@ -1,18 +1,20 @@
 from datetime import timedelta
+from decimal import Decimal
 from functools import wraps
 
 from django.contrib import messages
 from django.contrib.auth import views as auth_views
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, DecimalField, ExpressionWrapper, F, Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from catalog.models import Membership, OrderItem, TicketType, Venue, VenueIntegration
+from catalog.models import Membership, Order, OrderItem, TicketType, Venue, VenueIntegration
 
 from .forms import FeeForm, MemberForm, VenueCreateForm, VenueForm
+from .models import VenueStatusChange
 
 
 def platform_required(view):
@@ -103,6 +105,7 @@ def venue_detail(request, slug):
         venue, "summary", events=events, reserved=reserved, sold=sold,
         checklist=setup_checklist(venue, integrations),
         admins=venue.memberships.filter(role=Membership.Role.ADMIN).select_related("user"),
+        status_changes=venue.status_changes.select_related("changed_by")[:5],
     ))
 
 
@@ -111,12 +114,66 @@ def venue_detail(request, slug):
 def venue_toggle(request, slug):
     venue = get_object_or_404(Venue, slug=slug)
     venue.is_active = not venue.is_active
-    venue.save(update_fields=["is_active"])
+    with transaction.atomic():
+        venue.save(update_fields=["is_active"])
+        VenueStatusChange.objects.create(venue=venue, changed_by=request.user, is_active=venue.is_active)
     if venue.is_active:
         messages.success(request, f"{venue.name} está activo: la API expone sus fechas publicadas.")
     else:
         messages.success(request, f"{venue.name} quedó pausado: la API ya no expone sus fechas ni acepta reservas.")
     return redirect("backoffice:venue-detail", slug=venue.slug)
+
+
+def sales_rows(venue, now):
+    """Una fila por fecha: vendidas, reservas vigentes, cupo, ocupación y recaudación a precio de entrada."""
+    events = (
+        venue.events.annotate(
+            capacity=Sum("ticket_types__capacity"),
+            sold=Sum("ticket_types__sold"),
+            revenue=Sum(ExpressionWrapper(
+                F("ticket_types__sold") * F("ticket_types__price"),
+                output_field=DecimalField(max_digits=14, decimal_places=2),
+            )),
+        )
+        .order_by("-starts_at")
+        .prefetch_related("ticket_types")
+    )
+    reserved = dict(
+        OrderItem.objects.filter(order__event__venue=venue, order__expires_at__gt=now)
+        .values("order__event")
+        .annotate(total=Sum("quantity"))
+        .values_list("order__event", "total")
+    )
+    rows = []
+    for event in events:
+        sold, capacity = event.sold or 0, event.capacity or 0
+        rows.append({
+            "event": event, "sold": sold, "reserved": reserved.get(event.pk, 0),
+            "capacity": capacity, "revenue": event.revenue or Decimal(0),
+            "occupancy": round(sold * 100 / capacity) if capacity else 0,
+        })
+    return rows
+
+
+@platform_required
+def venue_orders(request, slug):
+    venue = get_object_or_404(Venue, slug=slug)
+    now = timezone.now()
+    orders = (
+        Order.objects.filter(event__venue=venue)
+        .select_related("event")
+        .annotate(
+            tickets=Sum("items__quantity"),
+            total=Sum(ExpressionWrapper(
+                F("items__quantity") * (F("items__unit_price") + F("items__unit_service_fee")),
+                output_field=DecimalField(max_digits=14, decimal_places=2),
+            )),
+        )
+        .order_by("-created_at")[:100]
+    )
+    return render(request, "backoffice/venue_orders.html", venue_context(
+        venue, "orders", orders=orders, sales=sales_rows(venue, now), now=now,
+    ))
 
 
 @platform_required
