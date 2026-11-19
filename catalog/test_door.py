@@ -8,7 +8,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
-from .models import Event, Membership, Order, OrderItem, TicketType, Venue
+from .models import Event, Membership, Order, OrderItem, Ticket, TicketType, Venue
 from .qr import sign_ticket
 from .tickets import issue_tickets
 
@@ -132,6 +132,14 @@ class ScanTests(DoorTestCase):
         self.ticket_a.refresh_from_db()
         self.assertEqual(self.ticket_a.used_at, used_at)
         self.assertEqual(self.ticket_a.used_by, self.door)
+
+    def test_already_used_without_used_by_returns_null(self):
+        Ticket.objects.filter(pk=self.ticket_a.pk).update(used_at=timezone.now(), used_by=None)
+        response = self.scan(self.ticket_a, self.token())
+        self.assertEqual(response.status_code, 409)
+        body = response.json()
+        self.assertEqual(body["result"], "already_used")
+        self.assertIsNone(body["ticket"]["usedBy"])
 
     def test_other_event_same_venue_is_wrong_event(self):
         response = self.scan(self.ticket_a2, self.token())
