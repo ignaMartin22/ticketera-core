@@ -1,0 +1,10 @@
+# Bloque a AGREGAR al Caddyfile del sistema (no reemplazar nada de lo existente).
+api.66-97-35-67.sslip.io {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:8001 {
+		# Caddy ya envía X-Forwarded-For y X-Forwarded-Proto; se dejan explícitos
+		# para conservar la IP y el esquema originales.
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+	}
+}
