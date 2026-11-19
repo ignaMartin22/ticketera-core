@@ -49,3 +49,7 @@ Qué falta para vender una fecha real de Infinity con TicketJuy. Estado al 19/11
 15. Probar la compra en celulares reales, también Android de gama baja.
 16. Actualizar `docs/hoja-de-ruta.md` de TicketJuy: todavía dice que la base va en Supabase, y el backend es este proyecto en Django.
 17. Cerrar el PR #5 de TicketJuy, que quedó reemplazado por #12.
+
+## Antes de producción
+
+- **Límite de reservas por IP.** Hoy cuenta por `REMOTE_ADDR`. Detrás de un proxy, y con el front llamando desde su servidor, todas las compras comparten una sola IP y el límite por defecto corta la venta a las 20 reservas por hora. En el despliegue de pruebas está subido con `ORDERS_RATE_LIMIT`. Falta que el front mande la IP del comprador por una cabecera que el backend solo acepte de orígenes confiables, y un contador compartido entre procesos (hoy es caché local por worker).
