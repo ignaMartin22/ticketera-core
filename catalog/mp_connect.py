@@ -9,16 +9,18 @@ from datetime import timedelta
 from urllib.parse import urlencode
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.core import signing
 from django.db import transaction
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
+from django.shortcuts import render
 from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods, require_POST, require_safe
 
 from . import crypto, mp
-from .models import MercadoPagoAccount, Membership, VenueIntegration
+from .models import MercadoPagoAccount, Membership, Venue, VenueIntegration
 from .staff_auth import error, venue_staff_view
 
 STATE_SALT = "catalog.mp-connect-state"
@@ -164,6 +166,29 @@ def not_configured():
     return error("mp_not_configured", 503)
 
 
+ORIGIN_API, ORIGIN_PLATFORM = "api", "platform"
+
+
+def make_state(venue, user, origin=ORIGIN_API):
+    return signing.dumps(
+        {"v": venue.pk, "u": user.pk, "n": secrets.token_urlsafe(16), "o": origin}, salt=STATE_SALT,
+    )
+
+
+def platform_link(venue, user):
+    """Link de autorización para que el dueño conecte `venue`. Se genera al momento, no se guarda."""
+    return mp.authorization_url(make_state(venue, user, ORIGIN_PLATFORM))
+
+
+def disconnect(venue):
+    """Borra la cuenta y los tokens del boliche y deja la integración en `disconnected`."""
+    account = MercadoPagoAccount.objects.filter(venue=venue).first()
+    if account is not None:
+        with transaction.atomic():
+            account.delete()
+            mark_disconnected(venue)
+
+
 @csrf_exempt
 @require_POST
 @never_cache
@@ -171,10 +196,7 @@ def not_configured():
 def connect(request, venue, user, membership):
     if not is_configured():
         return not_configured()
-    state = signing.dumps(
-        {"v": venue.pk, "u": user.pk, "n": secrets.token_urlsafe(16)}, salt=STATE_SALT,
-    )
-    return JsonResponse({"authorizationUrl": mp.authorization_url(state)})
+    return JsonResponse({"authorizationUrl": mp.authorization_url(make_state(venue, user))})
 
 
 def _return(**params):
@@ -186,19 +208,33 @@ def _fail(reason):
     return _return(mp="error", reason=reason)
 
 
-@require_safe
-@never_cache
-def oauth_callback(request):
-    if not is_configured():
-        return _fail("not_configured")
-    code = request.GET.get("code")
-    if not code:
-        return _fail("denied" if request.GET.get("error") else "invalid_state")
+def _result(request, reason, venue=None):
+    """Página pública para el dueño del boliche (origen `platform`): sin login ni datos sensibles."""
+    response = render(
+        request, "backoffice/mp_result.html",
+        {"reason": reason, "venue": venue, "ok": reason is None}, status=200,
+    )
+    response["X-Robots-Tag"] = "noindex"
+    return response
+
+
+def _read_state(request):
+    """Devuelve (boliche_id, usuario_id, origen), o None si el state no se puede leer."""
     try:
         payload = signing.loads(request.GET.get("state", ""), salt=STATE_SALT, max_age=STATE_MAX_AGE)
-        venue_id, user_id = payload["v"], payload["u"]
-    except (signing.BadSignature, KeyError, TypeError):
-        return _fail("invalid_state")
+        origin = payload.get("o", ORIGIN_API)
+        if origin not in (ORIGIN_API, ORIGIN_PLATFORM):
+            return None
+        return payload["v"], payload["u"], origin
+    except (signing.BadSignature, KeyError, TypeError, AttributeError):
+        return None
+
+
+def _authorized_venue(venue_id, user_id, origin):
+    """El boliche a conectar si quien generó el link sigue autorizado para hacerlo, o None."""
+    if origin == ORIGIN_PLATFORM:
+        user = get_user_model().objects.filter(pk=user_id, is_active=True, is_superuser=True).first()
+        return Venue.objects.filter(pk=venue_id).first() if user else None
     membership = (
         Membership.objects.select_related("venue")
         .filter(
@@ -207,9 +243,14 @@ def oauth_callback(request):
         )
         .first()
     )
-    if membership is None:
-        return _fail("invalid_state")
-    venue = membership.venue
+    return membership.venue if membership else None
+
+
+def _store_account(venue, code):
+    """Cambia el `code` por tokens y deja la cuenta cifrada y la integración en `connected`.
+
+    Devuelve True si conectó. Si falla, deja la integración en `error` y devuelve False.
+    """
     try:
         data = mp.exchange_code(code)
         account = MercadoPagoAccount.objects.filter(venue=venue).first() or MercadoPagoAccount(venue=venue)
@@ -223,8 +264,31 @@ def oauth_callback(request):
             mark_connected(account)
     except (mp.MercadoPagoError, crypto.TokenCryptoError, KeyError, TypeError, ValueError):
         mark_error(venue, "exchange_failed")
-        return _fail("exchange_failed")
-    return _return(mp="connected", venue=venue.slug)
+        return False
+    return True
+
+
+@require_safe
+@never_cache
+def oauth_callback(request):
+    if not is_configured():
+        return _fail("not_configured")
+    state = _read_state(request)
+    platform = state is not None and state[2] == ORIGIN_PLATFORM
+    code = request.GET.get("code")
+    if not code:
+        if platform:
+            return _result(request, "denied" if request.GET.get("error") else "invalid_state")
+        return _fail("denied" if request.GET.get("error") else "invalid_state")
+    if state is None:
+        return _fail("invalid_state")
+    venue_id, user_id, origin = state
+    venue = _authorized_venue(venue_id, user_id, origin)
+    if venue is None:
+        return _result(request, "invalid_state") if platform else _fail("invalid_state")
+    if not _store_account(venue, code):
+        return _result(request, "exchange_failed", venue) if platform else _fail("exchange_failed")
+    return _result(request, None, venue) if platform else _return(mp="connected", venue=venue.slug)
 
 
 def _iso(value):
@@ -236,13 +300,10 @@ def _iso(value):
 @never_cache
 @venue_staff_view(ADMIN)
 def account_status(request, venue, user, membership):
-    account = MercadoPagoAccount.objects.filter(venue=venue).first()
     if request.method == "DELETE":
-        if account is not None:
-            with transaction.atomic():
-                account.delete()
-                mark_disconnected(venue)
+        disconnect(venue)
         return HttpResponse(status=204)
+    account = MercadoPagoAccount.objects.filter(venue=venue).first()
     return JsonResponse({
         "connected": account is not None,
         "needsReconnect": account.needs_reconnect if account else False,

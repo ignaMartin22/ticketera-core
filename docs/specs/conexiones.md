@@ -40,6 +40,17 @@ Implementado en `catalog/mp_connect.py`. Los tokens viven en `MercadoPagoAccount
 5. Desconectar (`DELETE` en la API de gestión) borra los tokens y deja `disconnected`, sin `account_id`, `connected_at` ni `expires_at`.
 6. **Debe:** consultar el estado (`GET`) no crea el registro de `VenueIntegration`.
 
+### Origen del link: API o panel de la plataforma
+
+El `state` firmado lleva también el origen: `api` (el flujo anterior; un `state` viejo sin origen cuenta como `api`) o `platform`.
+
+- **Origen `platform`:** lo genera un superusuario desde la pestaña Conexiones del panel (`/plataforma/boliches/<slug>/conexiones/`). Quien autoriza es el dueño del boliche, que no tiene usuario en el panel y muchas veces abre el link desde otro dispositivo.
+  - **Debe:** al volver de Mercado Pago, el callback verifica que quien generó el link siga siendo superusuario activo (no pide membresía) y que el boliche exista.
+  - **Debe:** el callback responde una página pública (sin login, `noindex`, sin caché, sin datos sensibles) con el resultado: conectado, autorización cancelada, link vencido o no válido, o no se pudo completar la conexión.
+  - **Debe:** un `state` ilegible o vencido se trata como hasta ahora: redirección a `MP_CONNECT_RETURN_URL` con `mp=error&reason=invalid_state`.
+  - **Debe:** un `state` generado para un boliche nunca conecta a otro.
+- **Origen `api`:** sin cambios (exige ser `admin` del boliche y redirige a `MP_CONNECT_RETURN_URL`).
+
 Requisitos para los tokens:
 - Se guardan cifrados, con una clave que viene de una variable de entorno (`MP_TOKEN_ENCRYPTION_KEY`) y no de la base.
 - Nunca se muestran en el panel, en el admin, en la API ni en los logs.
@@ -47,5 +58,4 @@ Requisitos para los tokens:
 
 ## Pendiente
 
-- Botón "Conectar Mercado Pago" en la pestaña Conexiones del panel de la plataforma: hoy el link se pide desde la API de gestión.
 - WhatsApp y email.

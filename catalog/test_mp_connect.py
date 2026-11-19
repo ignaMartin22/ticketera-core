@@ -455,3 +455,91 @@ class IntegrationStatusTests(MpTestCase):
     def test_connecting_a_does_not_create_integration_for_b(self):
         self.run_callback(self.get_state())
         self.assertFalse(VenueIntegration.objects.filter(venue=self.venue_b).exists())
+
+
+class PlatformCallbackTests(MpTestCase):
+    def setUp(self):
+        super().setUp()
+        self.root = make_user("root_mp")
+        self.root.is_superuser = True
+        self.root.save()
+
+    def platform_state(self, venue=None, user=None, **extra):
+        from django.core import signing
+
+        from .mp_connect import STATE_SALT
+        payload = {"v": (venue or self.venue_a).pk, "u": (user or self.root).pk, "n": "x", "o": "platform", **extra}
+        return signing.dumps(payload, salt=STATE_SALT)
+
+    def test_08_platform_success_page(self):  # 8
+        response, exchange = self.run_callback(self.platform_state())
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Mercado Pago quedó conectado con")
+        self.assertContains(response, self.venue_a.name)
+        exchange.assert_called_once_with("abc")
+        account = MercadoPagoAccount.objects.get(venue=self.venue_a)
+        self.assertNotIn("APP_USR-acceso-nuevo", account.access_token)
+        self.assertEqual(crypto.decrypt(account.access_token), "APP_USR-acceso-nuevo")
+        self.assertEqual(VenueIntegration.objects.get(venue=self.venue_a).status, "connected")
+        self.assertFalse(MercadoPagoAccount.objects.filter(venue=self.venue_b).exists())
+
+    def test_09_works_without_session(self):  # 9
+        self.client.logout()
+        response, _ = self.run_callback(self.platform_state())
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("Location", response)
+        self.assertNotContains(response, "Entrar al panel")
+
+    def test_10_user_no_longer_superuser(self):  # 10
+        state = self.platform_state()
+        self.root.is_superuser = False
+        self.root.save()
+        response, exchange = self.run_callback(state)
+        self.assertContains(response, "no es válido")
+        exchange.assert_not_called()
+        self.assertFalse(MercadoPagoAccount.objects.exists())
+
+    def test_11_denied_without_code(self):  # 11
+        response = self.client.get(CALLBACK, {"error": "access_denied", "state": self.platform_state()})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Cancelaste")
+        self.assertFalse(MercadoPagoAccount.objects.exists())
+
+    def test_12_exchange_failed(self):  # 12
+        exchange = mock.Mock(side_effect=mp.MercadoPagoError(400, {"message": "invalid_grant"}))
+        response, _ = self.run_callback(self.platform_state(), exchange)
+        self.assertContains(response, "No pudimos completar la conexión")
+        self.assertEqual(VenueIntegration.objects.get(venue=self.venue_a).status, "error")
+        self.assertFalse(MercadoPagoAccount.objects.exists())
+
+    def test_13_expired_platform_state(self):  # 13
+        state = self.platform_state()
+        with mock.patch("django.core.signing.time.time", return_value=time.time() + 11 * 60):
+            response, exchange = self.run_callback(state)
+        self.assert_redirect(response, mp="error", reason="invalid_state")
+        exchange.assert_not_called()
+        self.assertFalse(MercadoPagoAccount.objects.exists())
+
+    def test_14_api_state_still_redirects(self):  # 14
+        response, _ = self.run_callback(self.get_state())
+        self.assert_redirect(response, mp="connected", venue="a")
+
+    def test_15_state_without_origin_is_api(self):  # 15
+        from django.core import signing
+
+        from .mp_connect import STATE_SALT
+        old = signing.dumps({"v": self.venue_a.pk, "u": self.admin_a.pk, "n": "x"}, salt=STATE_SALT)
+        response, _ = self.run_callback(old)
+        self.assert_redirect(response, mp="connected", venue="a")
+        MercadoPagoAccount.objects.all().delete()
+        old = signing.dumps({"v": self.venue_a.pk, "u": self.root.pk, "n": "x"}, salt=STATE_SALT)
+        response, _ = self.run_callback(old)
+        self.assert_redirect(response, mp="error", reason="invalid_state")
+
+    def test_16_result_page_is_private(self):  # 16
+        response, _ = self.run_callback(self.platform_state())
+        for secret in ("APP_USR-acceso-nuevo", "TG-refresco-nuevo", "APP_USR-pk-secreta", "secreto"):
+            self.assertNotContains(response, secret)
+        self.assertContains(response, 'name="robots" content="noindex"')
+        self.assertIn("no-store", response["Cache-Control"])
+        self.assertIn("noindex", response["X-Robots-Tag"])

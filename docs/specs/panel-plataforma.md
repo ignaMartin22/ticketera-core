@@ -73,7 +73,13 @@ Quiénes administran el boliche desde el dashboard de su sitio. Cargarlos acá n
 
 ### Conexiones
 
-Una tarjeta por proveedor con estado, cuenta vinculada, fechas y último error. El botón "Conectar" está deshabilitado hasta que exista cada integración. Ver [Conexiones](conexiones.md).
+Una tarjeta por proveedor con estado, cuenta vinculada, fechas y último error. Ver [Conexiones](conexiones.md).
+
+- **Mercado Pago, sin conectar (o vencida o con error):** botón "Generar link de conexión". Al enviarlo, la misma pantalla muestra el link de autorización en un campo de solo lectura, con "Copiar link", "Abrir" y la aclaración de que hay que mandárselo al dueño, que lo abra con la cuenta donde va a cobrar y que vence en 10 minutos. El link no se guarda ni va en la URL: sale en la respuesta del POST y se muestra una sola vez.
+- **Mercado Pago, conectada:** muestra la cuenta, desde cuándo y hasta cuándo, "Reconectar" y "Desconectar" (con confirmación; borra los tokens y deja la conexión en `disconnected`).
+- Si faltan las credenciales de Mercado Pago en el servidor, el botón queda deshabilitado con ese aviso.
+- Nunca se muestran tokens ni claves.
+- WhatsApp y Email: botón "Conectar" deshabilitado hasta que exista cada integración.
 
 ## Diseño
 
@@ -83,5 +89,4 @@ Una tarjeta por proveedor con estado, cuenta vinculada, fechas y último error. 
 
 ## Pendiente
 
-- Botón "Conectar Mercado Pago" en la pestaña Conexiones: el OAuth ya está hecho (ver [Conexiones](conexiones.md)) y hoy se inicia por la API de gestión.
 - Probar el ancho de celular en un navegador real.

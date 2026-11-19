@@ -17,7 +17,7 @@ Qué falta para vender una fecha real de Infinity con TicketJuy. Estado al 19/11
 
 ## Para vender una fecha real
 
-1. **Mercado Pago con split por boliche.** Hecho: vinculación de la cuenta del boliche por OAuth con renovación del token, link de pago con la API de Orders y `marketplace_fee` (cargo de servicio más comisión de la plataforma, con los importes guardados en el pedido), confirmación idempotente por webhook, conciliación de pagos sin notificación y emisión de entradas. Ver [conexiones](specs/conexiones.md) y [comisiones](specs/comisiones.md). Queda:
+1. **Mercado Pago con split por boliche.** Hecho: vinculación de la cuenta del boliche por OAuth (por la API de gestión o con el link que genera el panel de la plataforma) con renovación del token, link de pago con la API de Orders y `marketplace_fee` (cargo de servicio más comisión de la plataforma, con los importes guardados en el pedido), confirmación idempotente por webhook, conciliación de pagos sin notificación y emisión de entradas. Ver [conexiones](specs/conexiones.md) y [comisiones](specs/comisiones.md). Queda:
    - Decidir quién absorbe las comisiones propias de Mercado Pago.
    - Reembolsos, y qué pasa con los pagos marcados para revisión (`no_capacity`, `mismatch`, `duplicate`).
    - Botón de pago en la página del pedido de TicketJuy.
