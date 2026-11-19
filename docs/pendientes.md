@@ -27,7 +27,7 @@ Qué falta para vender una fecha real de Infinity con TicketJuy. Estado al 19/11
 6. Para el piloto, cada boliche carga su catálogo en el admin de Django y la plataforma lo administra desde `/plataforma/`. Falta ver los pedidos y compradores por boliche en el panel.
 7. Reporte de ventas, plata e ingresos por fecha.
 8. Conectar el dashboard `/admin` de TicketJuy (el repo de Infinity) al core según la [spec del ABM de eventos](specs/eventos-del-boliche.md). Hoy lo que carga el dueño queda en su navegador. Falta en el core:
-   - Venta pausada por fecha, portada de la fecha y tipo de entrada común o VIP.
+   - Portada de la fecha.
    - Identificadores que no cambien al editar.
    - Reglas de baja según haya ventas o no.
    - Una API de gestión con login del dueño, hecho desde el dashboard: la gente del boliche no entra al core.

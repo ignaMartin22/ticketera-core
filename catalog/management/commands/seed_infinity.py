@@ -96,6 +96,7 @@ class Command(BaseCommand):
                     event=event, slug=ticket_slug,
                     defaults={
                         "name": name, "price": price, "capacity": capacity, "sold": sold,
+                        "kind": TicketType.Kind.VIP if ticket_slug == "vip" else TicketType.Kind.COMMON,
                         "description": description, "is_active": True,
                     },
                 )
