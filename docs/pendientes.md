@@ -28,8 +28,8 @@ Qué falta para vender una fecha real de Infinity con TicketJuy. Estado al 19/11
 
 ## Panel y operación
 
-6. Para el piloto, cada boliche carga su catálogo en el admin de Django y la plataforma lo administra desde `/plataforma/`. Falta ver los pedidos y compradores por boliche en el panel.
-7. Reporte de ventas, plata e ingresos por fecha.
+6. Para el piloto, cada boliche carga su catálogo en el admin de Django y la plataforma lo administra desde `/plataforma/`. Los pedidos y compradores por boliche ya se ven en la pestaña Ventas del panel (últimos 100, con estado: pagado, pendiente de pago o vencido).
+7. Reporte de ventas por fecha en la pestaña Ventas del panel: vendidas, reservas vigentes, cupo, ocupación y recaudación por tipo de entrada. La recaudación es a precio de entrada; falta que salga de los pedidos pagados y descuente la comisión.
 8. Conectar el dashboard `/admin` de TicketJuy (el repo de Infinity) al core según la [spec del ABM de eventos](specs/eventos-del-boliche.md). Hoy lo que carga el dueño queda en su navegador. Falta en el core:
    - Portada de la fecha.
    - Identificadores que no cambien al editar.

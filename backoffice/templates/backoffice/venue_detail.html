@@ -20,6 +20,21 @@
     </dl>
     <p class="help">Administración: {% for m in admins %}{{ m.user.email }}{% if not forloop.last %}, {% endif %}{% empty %}nadie todavía.{% endfor %}</p>
   </section>
+  <section class="card">
+    <h2>Historial de estado</h2>
+    {% if status_changes %}
+      <ol class="timeline">
+        {% for change in status_changes %}
+          <li>
+            <p><strong>{% if change.is_active %}Activado{% else %}Pausado{% endif %}</strong></p>
+            <p class="help">{{ change.changed_at|date:"j/n/Y H:i" }} · {% if change.changed_by %}{{ change.changed_by.email|default:change.changed_by.username }}{% else %}sistema{% endif %}</p>
+          </li>
+        {% endfor %}
+      </ol>
+    {% else %}
+      <p class="muted">Sin cambios registrados.</p>
+    {% endif %}
+  </section>
 </div>
 <section class="card">
   <div class="section-head">
