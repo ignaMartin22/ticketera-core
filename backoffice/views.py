@@ -98,7 +98,7 @@ def venue_detail(request, slug):
         .order_by("starts_at")[:6]
     )
     reserved = OrderItem.objects.filter(
-        order__event__venue=venue, order__expires_at__gt=now,
+        order__event__venue=venue, order__expires_at__gt=now, order__paid_at__isnull=True,
     ).aggregate(total=Sum("quantity"))["total"] or 0
     sold = TicketType.objects.filter(event__venue=venue).aggregate(total=Sum("sold"))["total"] or 0
     return render(request, "backoffice/venue_detail.html", venue_context(
@@ -139,7 +139,9 @@ def sales_rows(venue, now):
         .prefetch_related("ticket_types")
     )
     reserved = dict(
-        OrderItem.objects.filter(order__event__venue=venue, order__expires_at__gt=now)
+        OrderItem.objects.filter(
+            order__event__venue=venue, order__expires_at__gt=now, order__paid_at__isnull=True,
+        )
         .values("order__event")
         .annotate(total=Sum("quantity"))
         .values_list("order__event", "total")
@@ -163,7 +165,7 @@ def venue_orders(request, slug):
         Order.objects.filter(event__venue=venue)
         .select_related("event")
         .annotate(
-            tickets=Sum("items__quantity"),
+            ticket_count=Sum("items__quantity"),
             total=Sum(ExpressionWrapper(
                 F("items__quantity") * (F("items__unit_price") + F("items__unit_service_fee")),
                 output_field=DecimalField(max_digits=14, decimal_places=2),

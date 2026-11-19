@@ -43,6 +43,11 @@ Ejemplo con P = $10.000, comprador paga 10 % y comisión 5 %: el comprador paga 
 
 La API expone `feeMode` y `buyerFeeRate` en cada boliche para que el sitio del boliche muestre el precio final. `platform_fee_rate` no se expone.
 
-## Pendiente: Mercado Pago
+## Mercado Pago
 
-Con Checkout Pro, la preferencia se crea con el token del boliche y `marketplace_fee = Σ cantidad × (unit_service_fee + unit_platform_fee)`. Mercado Pago deposita al boliche el total menos ese importe y a la plataforma ese importe. Las comisiones propias de Mercado Pago se descuentan aparte y todavía hay que decidir quién las absorbe.
+Implementado en `catalog/payments.py`. El link de pago es una order de Checkout Pro (API de Orders) creada con el token del boliche:
+
+- **Debe:** `marketplace_fee = Σ cantidad × (unit_service_fee + unit_platform_fee)`, con los importes guardados en los ítems del pedido, no con las tasas actuales del boliche. Si es 0 no se manda.
+- **Debe:** `Order.platform_fee` guarda ese mismo total.
+- El comprador paga `Σ cantidad × (unit_price + unit_service_fee)`: la comisión de la plataforma no se suma.
+- Mercado Pago deposita al boliche el total menos `marketplace_fee` y a la plataforma ese importe. Las comisiones propias de Mercado Pago se descuentan aparte y todavía hay que decidir quién las absorbe.

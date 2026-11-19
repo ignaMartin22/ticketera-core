@@ -1,10 +1,12 @@
+from uuid import uuid4
+
 from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.test import RequestFactory, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import Event, Membership, TicketType, Venue
+from .models import Event, Membership, Order, OrderItem, TicketType, Venue
 
 
 class CatalogTests(TestCase):
@@ -130,3 +132,22 @@ class CatalogTests(TestCase):
         request = self.admin_request(self.root)
         for model, obj in [(Event, self.moon_event), (TicketType, self.sold_ticket)]:
             self.assertTrue(admin.site._registry[model].has_delete_permission(request, obj))
+
+    def test_venue_admin_cannot_delete_with_orders_even_without_sales(self):
+        # Un pedido pendiente (sold = 0) protege la fecha y el tipo de entrada: PROTECT manda.
+        order = Order.objects.create(
+            event=self.draft, buyer_email="a@example.com", idempotency_key=uuid4(),
+            expires_at=timezone.now(),
+        )
+        ticket = TicketType.objects.create(
+            event=self.draft, slug="reservada", name="Reservada", price=100, capacity=5,
+        )
+        OrderItem.objects.create(
+            order=order, ticket_type=ticket, ticket_slug="reservada", quantity=1,
+            unit_price=100, unit_service_fee=0,
+        )
+        request = self.admin_request(self.venue_admin)
+        self.assertFalse(admin.site._registry[Event].has_delete_permission(request, self.draft))
+        self.assertFalse(admin.site._registry[TicketType].has_delete_permission(request, ticket))
+        request = self.admin_request(self.root)
+        self.assertTrue(admin.site._registry[Event].has_delete_permission(request, self.draft))

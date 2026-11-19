@@ -169,7 +169,7 @@ class BackofficeTests(TestCase):
         self.assertEqual(response.status_code, 200)
         rows = {row.pk: row for row in response.context["orders"]}
         self.assertEqual(len(rows), 2)
-        self.assertEqual((rows[order.pk].tickets, rows[order.pk].total), (2, Decimal("2200")))
+        self.assertEqual((rows[order.pk].ticket_count, rows[order.pk].total), (2, Decimal("2200")))
         self.assertContains(response, "ana@x.co")
         self.assertContains(response, "+5493884123456")
         self.assertContains(response, "Pendiente de pago")
@@ -193,3 +193,19 @@ class BackofficeTests(TestCase):
         self.assertEqual(row["occupancy"], 36)
         self.assertContains(response, "VIP: 2/4")
         self.assertContains(response, "$ 8.000,00")
+
+    def test_orders_shows_paid_orders_and_does_not_count_them_as_reserved(self):
+        event = Event.objects.create(venue=self.venue, slug="fecha", title="Fecha", starts_at=timezone.now(),
+                                     is_published=True)
+        ticket = TicketType.objects.create(event=event, slug="general", name="General", price="1000", capacity=10,
+                                           sold=2)
+        # Pagado: conserva expires_at vigente, pero ya está en las vendidas y no es una reserva.
+        paid = self.order(event, ticket, email="pago@x.co")
+        Order.objects.filter(pk=paid.pk).update(paid_at=timezone.now())
+
+        response = self.client.get(reverse("backoffice:venue-orders", args=["moon"]))
+        self.assertContains(response, "Pagado")
+        self.assertNotContains(response, "Pendiente de pago")
+        self.assertEqual(response.context["sales"][0]["reserved"], 0)
+        detail = self.client.get(reverse("backoffice:venue-detail", args=["moon"]))
+        self.assertEqual(detail.context["reserved"], 0)

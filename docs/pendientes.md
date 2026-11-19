@@ -9,17 +9,21 @@ Qué falta para vender una fecha real de Infinity con TicketJuy. Estado al 19/11
 - Nombre y WhatsApp del comprador en el pedido, y `manage.py seed_infinity` para desarrollo (#4).
 - Panel de la plataforma en `/plataforma/`, solo para el equipo de la plataforma: alta y pausa de boliches, comisión con historial (cargo al comprador y comisión de la plataforma), equipo de cada boliche y estado de las conexiones.
 - La gente de los boliches no entra al core: cada cliente tiene su repo con su sitio y su dashboard. Ver las [specs](specs/README.md).
+- Entradas con QR firmado de un solo uso: se emiten al reservar un pedido gratis o al marcar un pedido como pagado en el admin.
+- API de portería: login del personal de puerta, escaneo que quema la entrada y asistencia por evento. Funciona solo con conexión.
+- Mercado Pago: conexión OAuth del boliche, link de pago, webhook y conciliación, con la comisión de la plataforma como `marketplace_fee`.
+- Despliegue con Docker en una VPS con PostgreSQL, backups y proxy HTTPS (`docs/despliegue-vps.md`).
 - TicketJuy lee el catálogo de esta API y el checkout reserva el cupo (TicketJuy #12). La página del pedido muestra la reserva con el botón de pago deshabilitado.
 
 ## Para vender una fecha real
 
-1. **Mercado Pago Checkout Pro con split por boliche.** Vincular la cuenta del boliche por OAuth y renovar el token, según la [spec de conexiones](specs/conexiones.md). El modelo de estado y la pestaña del panel ya existen. Crear la preferencia con el token del boliche y el `marketplace_fee` (ver [comisiones](specs/comisiones.md)). Decidir quién absorbe las comisiones de Mercado Pago. Confirmar cada pago una sola vez por webhook y conciliar los pagos sin notificación.
-   - Al confirmar un pago, sumar a `sold` y dejar de contar el pedido en `TicketTypeQuerySet.with_reserved`. Si no, el cupo se cuenta dos veces hasta que vence la reserva.
-   - Definir qué pasa si el pago llega después de que venció la reserva: emitir si queda cupo, o reembolsar.
-   - Reembolsos.
-2. **Emisión de entradas.** Modelo `Ticket` con un QR firmado de un solo uso por cada unidad pagada. La página `/entrada/[code]` de TicketJuy todavía usa datos de prueba.
+1. **Mercado Pago con split por boliche.** Hecho: vinculación de la cuenta del boliche por OAuth con renovación del token, link de pago con la API de Orders y `marketplace_fee` (cargo de servicio más comisión de la plataforma, con los importes guardados en el pedido), confirmación idempotente por webhook, conciliación de pagos sin notificación y emisión de entradas. Ver [conexiones](specs/conexiones.md) y [comisiones](specs/comisiones.md). Queda:
+   - Decidir quién absorbe las comisiones propias de Mercado Pago.
+   - Reembolsos, y qué pasa con los pagos marcados para revisión (`no_capacity`, `mismatch`, `duplicate`).
+   - Botón de pago en la página del pedido de TicketJuy.
+2. **Página de la entrada.** La API ya devuelve las entradas del pedido con el texto del QR. La página `/entrada/[code]` de TicketJuy todavía usa datos de prueba.
 3. **Envío de entradas** por email y WhatsApp. La API de WhatsApp Business requiere aprobación de Meta y puede tardar: conviene pedirla ya.
-4. **Escáner de puerta** en el navegador del celular, que funcione sin señal y sincronice al volver. Falta una regla de operación para cuando dos celulares sin conexión aceptan el mismo QR.
+4. **Escáner de puerta** en el navegador del celular. La API de escaneo y el login del personal, con límite de intentos, están hechos; falta la pantalla en TicketJuy que abre la cámara. Después, el modo sin señal con sincronización al volver, que necesita una regla de operación para cuando dos celulares sin conexión aceptan el mismo QR.
 5. **Protección contra reservas automatizadas** en `POST .../orders/` (captcha o verificación de bots y un límite de intentos). Hoy un bot puede bloquear cupo de a 10 entradas durante 10 minutos, una y otra vez.
    - **El límite no puede ser por `REMOTE_ADDR`** (PR #14, retenido). El core recibe los pedidos desde el servidor de Next del repo del cliente, así que esa IP es la de Railway (donde corre el frontend) o la del proxy del deploy del core, no la del comprador. Un límite de 20 por hora e IP cortaría las compras de todo el sitio después de 20 intentos.
    - Opciones: que el front mande la IP del comprador en un encabezado y que el core solo le crea si la request trae la credencial del repo del cliente ([Clientes](specs/clientes.md)), o limitar por email o teléfono del comprador, o por boliche.
@@ -27,8 +31,8 @@ Qué falta para vender una fecha real de Infinity con TicketJuy. Estado al 19/11
 
 ## Panel y operación
 
-6. Para el piloto, cada boliche carga su catálogo en el admin de Django y la plataforma lo administra desde `/plataforma/`. Los pedidos y compradores por boliche ya se ven en la pestaña Ventas del panel (últimos 100, con estado de la reserva).
-7. Reporte de ventas por fecha en la pestaña Ventas del panel: vendidas, reservas vigentes, cupo, ocupación y recaudación por tipo de entrada. La recaudación es a precio de entrada por ahora; cuando haya pagos reales sale de los pedidos pagados (depende del #1).
+6. Para el piloto, cada boliche carga su catálogo en el admin de Django y la plataforma lo administra desde `/plataforma/`. Los pedidos y compradores por boliche ya se ven en la pestaña Ventas del panel (últimos 100, con estado: pagado, pendiente de pago o vencido).
+7. Reporte de ventas por fecha en la pestaña Ventas del panel: vendidas, reservas vigentes, cupo, ocupación y recaudación por tipo de entrada. La recaudación es a precio de entrada; falta que salga de los pedidos pagados y descuente la comisión.
 8. Conectar el dashboard `/admin` de TicketJuy (el repo de Infinity) al core según la [spec del ABM de eventos](specs/eventos-del-boliche.md). Hoy lo que carga el dueño queda en su navegador. La API de gestión ya existe; falta en el core:
    - Portada de la fecha.
    - Login del dueño desde su dashboard: hoy el token por usuario lo genera la plataforma con `manage.py create_api_token`.
@@ -36,10 +40,7 @@ Qué falta para vender una fecha real de Infinity con TicketJuy. Estado al 19/11
 
 ## Puesta en producción
 
-9. Hosting del backend con PostgreSQL administrado y backups.
-   - Agregar `gunicorn` y servir los estáticos (por ejemplo con `whitenoise`).
-   - Configurar `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS` y `SECURE_PROXY_SSL_HEADER` detrás del proxy HTTPS.
-   - Correr `manage.py migrate` en cada deploy.
+9. Hosting del backend. **Resuelto para pruebas**: imagen Docker con gunicorn y whitenoise, PostgreSQL en contenedor con backup diario (`deploy/backup.sh`) y proxy HTTPS de Caddy en una VPS (ver `docs/despliegue-vps.md`), con `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS` y `DJANGO_BEHIND_PROXY` configurados y `migrate` en cada arranque. Queda pendiente para producción real: PostgreSQL administrado (la app ya acepta `DATABASE_URL`), un dominio propio y sacar `MP_TEST_TOKENS`.
 10. Frontend en Railway con `TICKETERA_API_URL` apuntando al backend, y el dominio.
 11. Monitoreo de errores (por ejemplo Sentry) y logs.
 

@@ -27,8 +27,8 @@ Venue ─┬─ Membership ── User
 | Nivel | Quién | Dónde | Qué puede hacer |
 | --- | --- | --- | --- |
 | Plataforma | Superusuarios de Django | `/plataforma/` y `/admin/` del core | Todo: crear y pausar boliches, cambiar comisiones, cargar el equipo, cargar fechas y borrar. |
-| Administración del boliche | `Membership` con rol `admin` | Dashboard del repo de su boliche, vía la API de gestión (token por usuario) | Fechas y entradas de su boliche; borra solo las que no tienen ventas. Ver [ABM de eventos](eventos-del-boliche.md). |
-| Puerta | `Membership` con rol `door` | Pendiente | Reservado para el escáner de puerta. |
+| Administración del boliche | `Membership` con rol `admin` | Dashboard del repo de su boliche, vía la API de gestión de fechas y la conexión de Mercado Pago (`/api/v1/manage/`, con token por usuario) | Fechas y entradas de su boliche; borra solo las que no tienen ventas. Ver [ABM de eventos](eventos-del-boliche.md) y [Conexiones](conexiones.md). |
+| Puerta | `Membership` con rol `door` | API de portería (`/api/v1/door/`) con el login del personal (`/api/v1/auth/`) | Escanear entradas (cada QR firmado se acepta una sola vez) y ver la asistencia por evento. Funciona solo con conexión. |
 | Caja | `Membership` con rol `cashier` | Pendiente | Reservado para la venta en caja. |
 
 - **El core es solo de la plataforma.** La gente de los boliches nunca entra a `/plataforma/` ni al `/admin/` del core: trabaja desde el dashboard del repo de su boliche. Ver [Clientes](clientes.md).
@@ -44,8 +44,10 @@ Venue ─┬─ Membership ── User
 - **Debe:** en el panel, una membresía se busca por boliche y por id. Usar la URL de un boliche con la membresía de otro da 404.
 - Las pruebas usan siempre un segundo boliche para detectar accesos cruzados.
 
+- Los admins de pedidos, entradas y pagos del `/admin/` (`OrderAdmin`, `TicketAdmin`, `PaymentAdmin`) son herramientas de la plataforma. Igual limitan lo que ven al boliche de las membresías del usuario y no exponen datos de compradores de otros boliches.
+
 ## Pendiente
 
-- Admin de pedidos limitado por boliche, sin exponer datos de compradores de otros boliches.
-- Herramientas para los roles de puerta y caja.
+- Modo sin señal del escáner de puerta, que necesita una regla de operación para cuando dos celulares sin conexión aceptan el mismo QR.
+- Herramientas para el rol de caja.
 - Credenciales de API por repo de cliente, limitadas a su boliche (la API de gestión ya usa tokens por usuario). Ver [Clientes](clientes.md).

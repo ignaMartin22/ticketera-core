@@ -1,18 +1,8 @@
 from django.urls import path
 
-from . import manage, views
+from . import payment_confirm, payments, views
 
 urlpatterns = [
-    path(
-        "manage/venues/<slug:venue_slug>/events/",
-        manage.event_collection,
-        name="manage-event-list",
-    ),
-    path(
-        "manage/venues/<slug:venue_slug>/events/<slug:event_slug>/",
-        manage.event_resource,
-        name="manage-event-detail",
-    ),
     path("venues/", views.venue_list, name="venue-list"),
     path("venues/<slug:venue_slug>/events/", views.event_list, name="event-list"),
     path("venues/<slug:venue_slug>/events/<slug:event_slug>/", views.event_detail, name="event-detail"),
@@ -25,5 +15,15 @@ urlpatterns = [
         "venues/<slug:venue_slug>/events/<slug:event_slug>/orders/<uuid:order_id>/",
         views.order_detail,
         name="order-detail",
+    ),
+    path(
+        "venues/<slug:venue_slug>/events/<slug:event_slug>/orders/<uuid:order_id>/payment/",
+        payments.order_payment,
+        name="order-payment",
+    ),
+    path(
+        "venues/<slug:venue_slug>/events/<slug:event_slug>/orders/<uuid:order_id>/payment/sync/",
+        payment_confirm.order_payment_sync,
+        name="order-payment-sync",
     ),
 ]

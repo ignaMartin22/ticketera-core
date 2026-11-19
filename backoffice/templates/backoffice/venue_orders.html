@@ -52,8 +52,8 @@
                 {{ order.buyer_name|default:"—" }}<br>
                 <span class="help">{{ order.buyer_email }}{% if order.buyer_phone %} · {{ order.buyer_phone }}{% endif %}</span>
               </td>
-              <td>{% if order.expires_at > now %}<span class="badge badge-warn">Pendiente de pago</span>{% else %}<span class="badge">Vencido</span>{% endif %}</td>
-              <td class="num">{{ order.tickets|default:0 }}</td>
+              <td>{% if order.paid_at %}<span class="badge badge-ok">Pagado</span>{% elif order.expires_at > now %}<span class="badge badge-warn">Pendiente de pago</span>{% else %}<span class="badge">Vencido</span>{% endif %}</td>
+              <td class="num">{{ order.ticket_count|default:0 }}</td>
               <td class="num">{{ order.total|money }}</td>
             </tr>
           {% endfor %}

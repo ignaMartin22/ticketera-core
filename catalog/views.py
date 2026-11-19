@@ -12,8 +12,9 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST, require_safe
 
-from .models import Event, Order, TicketType, Venue
+from .models import Event, Order, Payment, TicketType, Venue
 from .orders import MAX_TICKETS_PER_ORDER, OrderConflict, reserve_order
+from .qr import sign_ticket
 
 # E.164: + y entre 8 y 15 dígitos. El front manda los celulares argentinos como +549XXXXXXXXXX.
 PHONE_RE = re.compile(r"\+[1-9]\d{7,14}")
@@ -94,9 +95,24 @@ def event_detail(request, venue_slug, event_slug):
 
 
 def order_data(order, items):
+    tickets = []
+    if order.paid_at is not None:
+        status = "paid"
+        tickets = [
+            {
+                "id": str(ticket.pk),
+                "ticketTypeId": ticket.ticket_type.slug,
+                "ticketTypeName": ticket.ticket_type.name,
+                "qr": sign_ticket(ticket.pk),
+                "usedAt": ticket.used_at.isoformat() if ticket.used_at else None,
+            }
+            for ticket in order.tickets.select_related("ticket_type")
+        ]
+    else:
+        status = "pending_payment" if order.expires_at > timezone.now() else "expired"
     return {
         "id": str(order.pk),
-        "status": "pending_payment" if order.expires_at > timezone.now() else "expired",
+        "status": status,
         "expiresAt": order.expires_at.isoformat(),
         "currency": "ARS",
         "total": format(sum(item.quantity * (item.unit_price + item.unit_service_fee) for item in items), ".2f"),
@@ -109,6 +125,10 @@ def order_data(order, items):
             }
             for item in items
         ],
+        "tickets": tickets,
+        "paymentReview": order.payments.filter(
+            outcome__in=[Payment.Outcome.NO_CAPACITY, Payment.Outcome.MISMATCH, Payment.Outcome.DUPLICATE],
+        ).exists(),
     }
 
 

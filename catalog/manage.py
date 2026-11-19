@@ -1,4 +1,3 @@
-import hashlib
 import json
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from functools import wraps
@@ -13,7 +12,8 @@ from django.utils.text import slugify
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_exempt
 
-from .models import ApiToken, Event, Membership, TicketType, Venue
+from .models import Event, Membership, TicketType, Venue
+from .staff_auth import bearer_user
 
 MAX_BODY_SIZE = 8192
 
@@ -27,25 +27,13 @@ class ManageConflict(Exception):
     pass
 
 
-def token_user(request):
-    scheme, _, key = request.headers.get("Authorization", "").partition(" ")
-    if scheme != "Bearer" or not key:
-        return None
-    token = (
-        ApiToken.objects.filter(key_hash=hashlib.sha256(key.encode()).hexdigest(), is_active=True)
-        .select_related("user")
-        .first()
-    )
-    return token.user if token else None
-
-
 def venue_admin_required(view):
     """Exige un token Bearer de un usuario que administra el boliche de la URL (o superusuario)."""
 
     @csrf_exempt
     @wraps(view)
     def wrapper(request, venue_slug, *args, **kwargs):
-        user = token_user(request)
+        user = bearer_user(request)
         if user is None:
             return JsonResponse({"error": "unauthorized"}, status=401)
         venue = Venue.objects.filter(slug=venue_slug).first()

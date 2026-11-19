@@ -14,9 +14,9 @@ SECRET_KEY = (
 )
 ALLOWED_HOSTS = os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 CSRF_TRUSTED_ORIGINS = [
-    origin
+    origin.strip()
     for origin in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",")
-    if origin
+    if origin.strip()
 ]
 ROOT_URLCONF = "ticketera.urls"
 WSGI_APPLICATION = "ticketera.wsgi.application"
@@ -108,3 +108,17 @@ else:
             "OPTIONS": {"sslmode": os.environ.get("POSTGRES_SSLMODE", "prefer")},
         },
     }
+
+# Mercado Pago (conexión del boliche). Todo es opcional: sin estas variables la app
+# arranca y las rutas de conexión responden 503 mp_not_configured.
+MP_APP_ID = os.environ.get("MP_APP_ID", "")
+MP_CLIENT_SECRET = os.environ.get("MP_CLIENT_SECRET", "")
+MP_REDIRECT_URI = os.environ.get("MP_REDIRECT_URI", "")
+MP_TOKEN_ENCRYPTION_KEY = os.environ.get("MP_TOKEN_ENCRYPTION_KEY", "")
+MP_CONNECT_RETURN_URL = os.environ.get("MP_CONNECT_RETURN_URL", "/")
+MP_TEST_TOKENS = os.environ.get("MP_TEST_TOKENS") == "1"
+PUBLIC_API_URL = os.environ.get("PUBLIC_API_URL", "").rstrip("/")
+FRONT_BASE_URL = os.environ.get("FRONT_BASE_URL", "").rstrip("/")
+# Clave secreta de la aplicación para validar la firma del webhook de pagos.
+# Sin ella el webhook responde 503 mp_not_configured.
+MP_WEBHOOK_SECRET = os.environ.get("MP_WEBHOOK_SECRET", "")

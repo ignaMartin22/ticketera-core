@@ -46,8 +46,8 @@ Una tarjeta por boliche con: nombre, slug, ciudad, color, estado (activo o pausa
 ### Ventas
 
 - **Ventas por fecha:** una fila por fecha del boliche, publicadas y borradores, pasadas y próximas, de la más nueva a la más vieja. Cada fila muestra vendidas, reservas vigentes, cupo, ocupación, recaudación y el detalle por tipo de entrada (vendidas sobre cupo).
-- La recaudación es a precio de entrada, sin cargo de servicio ni comisión (ver [ABM de eventos](eventos-del-boliche.md#listado-y-resumen)). Pendiente: con pagos reales, sale de los pedidos pagados.
-- **Pedidos:** los últimos 100, del más nuevo al más viejo, con fecha, evento, comprador (nombre, email y teléfono), estado — pendiente de pago o vencido según la reserva siga vigente —, cantidad de entradas y total con cargo de servicio.
+- La recaudación es a precio de entrada, sin cargo de servicio ni comisión (ver [ABM de eventos](eventos-del-boliche.md#listado-y-resumen)). Pendiente: que salga de los pedidos pagados y descuente la comisión de la plataforma. Las reservas vigentes no cuentan los pedidos pagados (ya están en las vendidas).
+- **Pedidos:** los últimos 100, del más nuevo al más viejo, con fecha, evento, comprador (nombre, email y teléfono), estado — pagado si tiene `paid_at`; si no, pendiente de pago o vencido según la reserva siga vigente —, cantidad de entradas y total con cargo de servicio.
 
 ### Datos
 
@@ -83,5 +83,5 @@ Una tarjeta por proveedor con estado, cuenta vinculada, fechas y último error. 
 
 ## Pendiente
 
-- Botón "Conectar Mercado Pago" con OAuth.
+- Botón "Conectar Mercado Pago" en la pestaña Conexiones: el OAuth ya está hecho (ver [Conexiones](conexiones.md)) y hoy se inicia por la API de gestión.
 - Probar el ancho de celular en un navegador real.
