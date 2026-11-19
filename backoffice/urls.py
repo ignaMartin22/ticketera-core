@@ -12,6 +12,7 @@ urlpatterns = [
     path("boliches/nuevo/", views.venue_create, name="venue-create"),
     path("boliches/<slug:slug>/", views.venue_detail, name="venue-detail"),
     path("boliches/<slug:slug>/estado/", views.venue_toggle, name="venue-toggle"),
+    path("boliches/<slug:slug>/pedidos/", views.venue_orders, name="venue-orders"),
     path("boliches/<slug:slug>/datos/", views.venue_edit, name="venue-edit"),
     path("boliches/<slug:slug>/comision/", views.venue_fees, name="venue-fees"),
     path("boliches/<slug:slug>/equipo/", views.venue_team, name="venue-team"),

@@ -1,0 +1,67 @@
+{% extends "backoffice/venue_base.html" %}
+{% load backoffice %}
+{% block tab %}
+<section class="card">
+  <h2>Ventas por fecha</h2>
+  <p class="help">La recaudación es a precio de entrada, sin cargo de servicio ni comisiones. Cuando haya pagos reales, va a salir de los pedidos pagados.</p>
+  {% if sales %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Fecha</th><th>Evento</th><th>Estado</th><th class="num">Vendidas</th><th class="num">Reservas</th><th class="num">Cupo</th><th class="num">Ocupación</th><th class="num">Recaudación</th></tr>
+        </thead>
+        <tbody>
+          {% for row in sales %}
+            <tr>
+              <td>{{ row.event.starts_at|date:"j/n/y H:i" }}</td>
+              <td>
+                {{ row.event.title }}<br>
+                <span class="help">{% for ticket in row.event.ticket_types.all %}{{ ticket.name }}: {{ ticket.sold }}/{{ ticket.capacity }}{% if not forloop.last %} · {% endif %}{% empty %}Sin tipos de entrada{% endfor %}</span>
+              </td>
+              <td>{% if row.event.is_published %}<span class="badge badge-ok">Publicada</span>{% else %}<span class="badge">Borrador</span>{% endif %}</td>
+              <td class="num">{{ row.sold }}</td>
+              <td class="num">{{ row.reserved }}</td>
+              <td class="num">{{ row.capacity }}</td>
+              <td class="num">{{ row.occupancy }} %</td>
+              <td class="num">{{ row.revenue|money }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="muted">Sin fechas todavía.</p>
+  {% endif %}
+</section>
+<section class="card">
+  <h2>Pedidos</h2>
+  <p class="help">Los últimos 100 pedidos, del más nuevo al más viejo. Cada reserva retiene el cupo por 10 minutos o hasta que se pague.</p>
+  {% if orders %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Pedido</th><th>Fecha</th><th>Evento</th><th>Comprador</th><th>Estado</th><th class="num">Entradas</th><th class="num">Total</th></tr>
+        </thead>
+        <tbody>
+          {% for order in orders %}
+            <tr>
+              <td class="muted" title="{{ order.id }}">{{ order.id|slice:":8" }}</td>
+              <td>{{ order.created_at|date:"j/n/y H:i" }}</td>
+              <td>{{ order.event.title }}</td>
+              <td>
+                {{ order.buyer_name|default:"—" }}<br>
+                <span class="help">{{ order.buyer_email }}{% if order.buyer_phone %} · {{ order.buyer_phone }}{% endif %}</span>
+              </td>
+              <td>{% if order.expires_at > now %}<span class="badge badge-warn">Pendiente de pago</span>{% else %}<span class="badge">Vencido</span>{% endif %}</td>
+              <td class="num">{{ order.tickets|default:0 }}</td>
+              <td class="num">{{ order.total|money }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="muted">Sin pedidos todavía.</p>
+  {% endif %}
+</section>
+{% endblock %}

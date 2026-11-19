@@ -38,11 +38,24 @@ Los dos son solo para superusuarios. La gente de cada boliche no entra al core.
 
 Las membresías de puerta y caja quedan registradas para sus futuras herramientas.
 
+## Producción
+
+El servidor es `gunicorn` y los estáticos los sirve `whitenoise` (con hash en el nombre, así que `collectstatic` es requisito del deploy):
+
+```bash
+pip install -r requirements.txt
+python manage.py migrate
+python manage.py collectstatic --noinput
+gunicorn ticketera.wsgi
+```
+
+Variables necesarias: `DATABASE_URL`, `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS` (con esquema, ej. `https://midominio.com`) y `DJANGO_BEHIND_PROXY=1` detrás del proxy HTTPS. `DJANGO_SSL_REDIRECT`, `DJANGO_HSTS_SECONDS` y `DJANGO_HSTS_PRELOAD` son opt-in: ver `.env.example`.
+
 ## Specs
 
 El comportamiento de cada parte del core está en [docs/specs](docs/specs/README.md): [clientes](docs/specs/clientes.md), [multi-boliche](docs/specs/multi-boliche.md), [catálogo y pedidos](docs/specs/catalogo-y-pedidos.md), [ABM de eventos del boliche](docs/specs/eventos-del-boliche.md), [comisiones](docs/specs/comisiones.md), [panel de la plataforma](docs/specs/panel-plataforma.md) y [conexiones](docs/specs/conexiones.md). Si un cambio altera un comportamiento, actualizá la spec en el mismo PR.
 
-La conexión local usa `localhost:5432` por defecto. Configurá `POSTGRES_HOST`, `POSTGRES_PORT` y `POSTGRES_SSLMODE` según la instancia, o `DATABASE_URL` para una connection string completa (Neon). Fuera de desarrollo, configurá también `DJANGO_SECRET_KEY` y `DJANGO_ALLOWED_HOSTS`.
+La conexión local usa `localhost:5432` por defecto. Configurá `POSTGRES_HOST`, `POSTGRES_PORT` y `POSTGRES_SSLMODE` según la instancia, o `DATABASE_URL` para una connection string completa (Neon). Fuera de desarrollo, configurá también `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS` y `DJANGO_CSRF_TRUSTED_ORIGINS`.
 
 ## API pública
 

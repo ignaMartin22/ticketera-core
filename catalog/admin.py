@@ -1,11 +1,17 @@
 from django import forms
 from django.contrib import admin
+from django.db.models import Sum
 from django.utils import timezone
 
 from .models import ApiToken, Event, Membership, TicketType, Venue
 
 
-admin.site.register(Venue)
+@admin.register(Venue)
+class VenueAdmin(admin.ModelAdmin):
+    def get_readonly_fields(self, request, obj=None):
+        return ("slug",) if obj else ()
+
+
 admin.site.register(Membership)
 
 
@@ -21,6 +27,8 @@ def managed_venues(user):
     # tiene membresías, el catálogo igual queda limitado a sus boliches.
     if user.is_superuser:
         return Venue.objects.all()
+    if not user.is_authenticated:
+        return Venue.objects.none()
     return Venue.objects.filter(memberships__user=user, memberships__role=Membership.Role.ADMIN)
 
 
@@ -39,7 +47,18 @@ class VenueCatalogAdmin(admin.ModelAdmin):
     has_view_permission = has_change_permission
 
     def has_delete_permission(self, request, obj=None):
-        return request.user.is_superuser
+        if request.user.is_superuser:
+            return True
+        if obj is None:
+            return self.has_module_permission(request)
+        # Sin ventas, el administrador del boliche puede darlo de baja.
+        return (
+            managed_venues(request.user).filter(pk=self.venue_id(obj)).exists()
+            and self.has_no_sales(obj)
+        )
+
+    def has_no_sales(self, obj):
+        return False
 
     def get_actions(self, request):
         actions = super().get_actions(request)
@@ -62,6 +81,9 @@ class EventAdmin(VenueCatalogAdmin):
 
     def get_readonly_fields(self, request, obj=None):
         return ("venue", "slug") if obj else ()
+
+    def has_no_sales(self, obj):
+        return not obj.ticket_types.aggregate(s=Sum("sold"))["s"]
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "venue":
@@ -95,6 +117,9 @@ class TicketTypeAdmin(VenueCatalogAdmin):
 
     def get_readonly_fields(self, request, obj=None):
         return ("event", "slug", "sold") if obj else ("sold",)
+
+    def has_no_sales(self, obj):
+        return obj.sold == 0
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "event":
