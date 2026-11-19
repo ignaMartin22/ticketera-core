@@ -171,7 +171,7 @@ class BackofficeTests(TestCase):
         self.assertEqual(response.status_code, 200)
         rows = {row.pk: row for row in response.context["orders"]}
         self.assertEqual(len(rows), 2)
-        self.assertEqual((rows[order.pk].tickets, rows[order.pk].total), (2, Decimal("2200")))
+        self.assertEqual((rows[order.pk].ticket_count, rows[order.pk].total), (2, Decimal("2200")))
         self.assertContains(response, "ana@x.co")
         self.assertContains(response, "+5493884123456")
         self.assertContains(response, "Pendiente de pago")

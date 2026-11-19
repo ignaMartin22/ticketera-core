@@ -165,7 +165,7 @@ def venue_orders(request, slug):
         Order.objects.filter(event__venue=venue)
         .select_related("event")
         .annotate(
-            tickets=Sum("items__quantity"),
+            ticket_count=Sum("items__quantity"),
             total=Sum(ExpressionWrapper(
                 F("items__quantity") * (F("items__unit_price") + F("items__unit_service_fee")),
                 output_field=DecimalField(max_digits=14, decimal_places=2),
