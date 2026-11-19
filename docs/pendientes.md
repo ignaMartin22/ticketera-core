@@ -20,7 +20,10 @@ Qué falta para vender una fecha real de Infinity con TicketJuy. Estado al 19/11
 2. **Emisión de entradas.** Modelo `Ticket` con un QR firmado de un solo uso por cada unidad pagada. La página `/entrada/[code]` de TicketJuy todavía usa datos de prueba.
 3. **Envío de entradas** por email y WhatsApp. La API de WhatsApp Business requiere aprobación de Meta y puede tardar: conviene pedirla ya.
 4. **Escáner de puerta** en el navegador del celular, que funcione sin señal y sincronice al volver. Falta una regla de operación para cuando dos celulares sin conexión aceptan el mismo QR.
-5. **Protección contra reservas automatizadas** en `POST .../orders/` (captcha o verificación de bots y límite por IP). Hoy un bot puede bloquear cupo de a 10 entradas durante 10 minutos, una y otra vez.
+5. **Protección contra reservas automatizadas** en `POST .../orders/` (captcha o verificación de bots y un límite de intentos). Hoy un bot puede bloquear cupo de a 10 entradas durante 10 minutos, una y otra vez.
+   - **El límite no puede ser por `REMOTE_ADDR`** (PR #14, retenido). El core recibe los pedidos desde el servidor de Next del repo del cliente, así que esa IP es la de Vercel o la del proxy del deploy, no la del comprador. Un límite de 20 por hora e IP cortaría las compras de todo el sitio después de 20 intentos.
+   - Opciones: que el front mande la IP del comprador en un encabezado y que el core solo le crea si la request trae la credencial del repo del cliente ([Clientes](specs/clientes.md)), o limitar por email o teléfono del comprador, o por boliche.
+   - El contador tiene que vivir en un caché compartido entre workers. `LocMemCache` es por proceso y multiplica el límite por la cantidad de workers de gunicorn.
 
 ## Panel y operación
 

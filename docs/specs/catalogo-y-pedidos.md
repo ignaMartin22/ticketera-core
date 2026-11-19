@@ -80,4 +80,5 @@ API pública que consume el repo de cada cliente (TicketJuy para Infinity) desde
 
 - Confirmar el pago y pasar de reserva a vendida: sumar a `sold` y dejar de contar ese pedido como reserva vigente. Si no, el cupo se cuenta dos veces hasta que vence la reserva.
 - Qué hacer si el pago llega después del vencimiento: emitir si queda cupo o reembolsar.
-- Protección contra reservas automatizadas (captcha y límite por IP).
+- Protección contra reservas automatizadas (captcha y límite de intentos).
+  - La IP que ve el core (`REMOTE_ADDR`) es la del servidor del repo del cliente, no la del comprador. El límite tiene que usar la IP del comprador, reenviada por el front y válida solo con la credencial del cliente, o claves como el email o el teléfono. Ver [Pendientes](../pendientes.md), ítem 5.
