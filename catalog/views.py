@@ -12,6 +12,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST, require_safe
 
+from .covers import cover_url
 from .models import Event, Order, Payment, TicketType, Venue
 from .orders import MAX_TICKETS_PER_ORDER, OrderConflict, reserve_order
 from .qr import sign_ticket
@@ -49,6 +50,7 @@ def event_data(event):
         "doorsNote": event.doors_note,
         "ageLimit": event.age_limit,
         "dressCode": event.dress_code or None,
+        "cover": cover_url(event.cover),
         "salesOpen": event.sales_open,
         "ticketTypes": [
             {

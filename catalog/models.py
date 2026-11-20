@@ -153,6 +153,9 @@ class Event(models.Model):
     doors_note = models.CharField(max_length=200, blank=True)
     age_limit = models.PositiveSmallIntegerField(default=18, validators=[MaxValueValidator(99)])
     dress_code = models.CharField(max_length=120, blank=True)
+    cover = models.CharField(
+        max_length=200, blank=True, help_text="Portada (flyer), ruta dentro de MEDIA_ROOT. Se sube desde la API de gestión.",
+    )
     is_published = models.BooleanField(default=False)
     sales_open = models.BooleanField(
         default=True, help_text="Si está en no, la fecha se ve pero no acepta reservas.",

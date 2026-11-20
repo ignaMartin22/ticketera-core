@@ -12,6 +12,7 @@ from django.utils.text import slugify
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_exempt
 
+from .covers import MAX_UPLOAD_BYTES, cover_url, delete_cover_file, process_cover, save_cover
 from .models import Event, Membership, TicketType, Venue
 from .staff_auth import bearer_user
 
@@ -108,6 +109,7 @@ def managed_event_detail(event):
         "doorsNote": event.doors_note,
         "ageLimit": event.age_limit,
         "dressCode": event.dress_code or None,
+        "cover": cover_url(event.cover),
         "ticketTypes": [managed_ticket_data(ticket) for ticket in event.managed_ticket_types],
     }
 
@@ -397,8 +399,49 @@ def update_ticket_types(event, items):
 def event_delete(request, event):
     if sum(ticket.sold for ticket in event.managed_ticket_types):
         return JsonResponse({"error": "has_sales"}, status=409)
+    cover = event.cover
     try:
         event.delete()
     except ProtectedError:
         return JsonResponse({"error": "has_orders"}, status=409)
+    delete_cover_file(cover)
     return HttpResponse(status=204)
+
+
+@never_cache
+@venue_admin_required
+def event_cover(request, venue, event_slug):
+    """POST multipart con el archivo en `file`: reemplaza la portada. DELETE: la saca."""
+    event = Event.objects.filter(venue=venue, slug=event_slug).select_related("venue").first()
+    if event is None:
+        return JsonResponse({"error": "event_unavailable"}, status=404)
+    if request.method == "DELETE":
+        old = event.cover
+        Event.objects.filter(pk=event.pk).update(cover="")
+        delete_cover_file(old)
+        return JsonResponse({"cover": None})
+    if request.method != "POST":
+        return JsonResponse({"error": "method_not_allowed"}, status=405)
+    # Un archivo enorme se rechaza antes de leerlo (el margen es para el resto del multipart).
+    try:
+        length = int(request.META.get("CONTENT_LENGTH") or 0)
+    except ValueError:
+        length = 0
+    if length > MAX_UPLOAD_BYTES + 64 * 1024:
+        return JsonResponse({"error": "cover_too_large"}, status=413)
+    upload = request.FILES.get("file")
+    if upload is None:
+        return JsonResponse({"error": "invalid_cover"}, status=400)
+    try:
+        data = process_cover(upload)
+    except ValidationError as exc:
+        error = str(exc.message)
+        return JsonResponse({"error": error}, status=413 if error == "cover_too_large" else 400)
+    path = save_cover(event, data)
+    with transaction.atomic():
+        locked = Event.objects.select_for_update().get(pk=event.pk)
+        old = locked.cover
+        locked.cover = path
+        locked.save(update_fields=["cover"])
+    delete_cover_file(old)
+    return JsonResponse({"cover": cover_url(path)})

@@ -17,5 +17,12 @@ docker compose -f "$COMPOSE_FILE" exec -T db \
 mv "$OUT.tmp" "$OUT"
 chmod 600 "$OUT"
 
+# Portadas de las fechas (volumen media del contenedor web).
+MEDIA_OUT="$BACKUP_DIR/ticketjuy-media-$STAMP.tar.gz"
+docker compose -f "$COMPOSE_FILE" exec -T web tar -C /app/media -czf - . > "$MEDIA_OUT.tmp"
+mv "$MEDIA_OUT.tmp" "$MEDIA_OUT"
+chmod 600 "$MEDIA_OUT"
+
 find "$BACKUP_DIR" -name 'ticketjuy-*.sql.gz' -type f -mtime +7 -delete
-echo "Backup OK: $OUT"
+find "$BACKUP_DIR" -name 'ticketjuy-media-*.tar.gz' -type f -mtime +7 -delete
+echo "Backup OK: $OUT y $MEDIA_OUT"
