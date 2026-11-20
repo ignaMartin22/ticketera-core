@@ -73,6 +73,8 @@ Cabeceras: `Content-Type: application/json` e `Idempotency-Key: <uuid>`. El nave
 }
 ```
 
+`phone` es opcional (las entradas todavía no se envían por WhatsApp): se puede omitir o mandar vacío. Si viene, tiene que ser E.164 (`+549` y los 10 dígitos para celulares argentinos).
+
 Respuesta `201` (o `200` si es un reintento con la misma clave y el mismo contenido): `{ order: Order }`.
 
 | Estado | `error` | Qué hacer |

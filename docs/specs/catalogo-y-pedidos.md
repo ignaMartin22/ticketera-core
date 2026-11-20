@@ -42,7 +42,7 @@ API pública que consume el repo de cada cliente (TicketJuy para Infinity) desde
 | `invalid_request` | Falta el `Idempotency-Key` o no es UUID, el JSON es inválido o no es un objeto, o un `ticketTypeId` no es un slug válido |
 | `invalid_email` | Email ausente, de más de 254 caracteres o con formato inválido. Se guarda sin espacios al costado |
 | `invalid_name` | Nombre vacío o de más de 150 caracteres. Se guarda con los espacios internos colapsados |
-| `invalid_phone` | Teléfono que no es E.164 (`+` y de 8 a 15 dígitos). Los celulares argentinos van como `+549` y 10 dígitos |
+| `invalid_phone` | Teléfono que no es E.164 (`+` y de 8 a 15 dígitos). Los celulares argentinos van como `+549` y 10 dígitos. El teléfono es opcional: sin él (o vacío) el pedido se crea igual |
 | `invalid_items` | `items` vacío, con más de 10 líneas, un tipo repetido, o una cantidad que no es un entero entre 1 y 10 |
 | `order_limit_exceeded` | Más de 10 entradas en total |
 

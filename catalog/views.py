@@ -155,8 +155,12 @@ def order_input(request):
     if not isinstance(name, str) or not 1 <= len(" ".join(name.split())) <= 150:
         raise ValidationError("invalid_name")
     name = " ".join(name.split())
+    # Opcional: hoy las entradas no se envían por WhatsApp, así que el front ya no lo pide.
+    # Si viene, tiene que ser un número E.164 válido.
     phone = data.get("phone")
-    if not isinstance(phone, str) or not PHONE_RE.fullmatch(phone):
+    if phone is None or phone == "":
+        phone = ""
+    elif not isinstance(phone, str) or not PHONE_RE.fullmatch(phone):
         raise ValidationError("invalid_phone")
     items = data.get("items")
     if not isinstance(items, list) or not 1 <= len(items) <= MAX_TICKETS_PER_ORDER:
