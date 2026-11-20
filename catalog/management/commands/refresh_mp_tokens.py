@@ -10,7 +10,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         due = MercadoPagoAccount.objects.filter(
-            needs_reconnect=False, expires_at__lt=timezone.now() + RENEW_BEFORE,
+            direct=False, needs_reconnect=False, expires_at__lt=timezone.now() + RENEW_BEFORE,
         ).values_list("pk", "venue__slug")
         renewed = failed = 0
         for pk, slug in list(due):

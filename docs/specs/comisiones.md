@@ -49,5 +49,6 @@ Implementado en `catalog/payments.py`. El link de pago es una order de Checkout 
 
 - **Debe:** `marketplace_fee = Σ cantidad × (unit_service_fee + unit_platform_fee)`, con los importes guardados en los ítems del pedido, no con las tasas actuales del boliche. Si es 0 no se manda.
 - **Debe:** `Order.platform_fee` guarda ese mismo total.
+- **Cobro directo** (cuenta con `direct=True`, ver `conexiones.md`): no se manda `marketplace_fee`, cualquiera sea la comisión. `Order.platform_fee` se guarda igual con el importe calculado, para liquidarlo por fuera.
 - El comprador paga `Σ cantidad × (unit_price + unit_service_fee)`: la comisión de la plataforma no se suma.
 - Mercado Pago deposita al boliche el total menos `marketplace_fee` y a la plataforma ese importe. Las comisiones propias de Mercado Pago se descuentan aparte y todavía hay que decidir quién las absorbe.

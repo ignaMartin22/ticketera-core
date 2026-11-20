@@ -177,6 +177,22 @@ docker compose -f deploy/docker-compose.yml exec -T web python manage.py mp_set_
 - Solo acepta cuentas de prueba (las que Mercado Pago marca con `test_user`); una cuenta real se rechaza y no se guarda nada.
 - No reemplaza la prueba de la conexión por OAuth: ese flujo se sigue probando aparte.
 
+## Cuenta de cobro directo (prueba o producción)
+
+Para que toda la venta de un boliche entre a una cuenta de Mercado Pago cargada a mano (sin `marketplace_fee` ni reparto), cargá su access token. Se lee de un archivo por entrada estándar y nunca se imprime:
+
+```bash
+# cuenta de prueba
+docker compose -f deploy/docker-compose.yml exec -T web python manage.py mp_set_own_account infinity < /ruta/archivo-con-el-token
+# cuenta real
+docker compose -f deploy/docker-compose.yml exec -T web python manage.py mp_set_own_account infinity --produccion < /ruta/archivo-con-el-token
+```
+
+- El Access Token sale de la sección Credenciales de la aplicación en el panel de Mercado Pago (pestaña Prueba o Producción).
+- Una cuenta real exige `--produccion`; con `--produccion` se rechaza una cuenta de prueba.
+- Solo necesita `MP_TOKEN_ENCRYPTION_KEY` (no `MP_TEST_TOKENS`).
+- Conectar el boliche por OAuth después reemplaza este modo.
+
 ## 9. Actualizar y volver atrás
 
 Antes de actualizar, hacer un backup: `/opt/ticketjuy/deploy/backup.sh`.

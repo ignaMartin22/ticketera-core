@@ -323,6 +323,19 @@ class PlatformMercadoPagoTests(TestCase):
         for secret in (ACCESS, REFRESH, PUBLIC_KEY, "secreto"):
             self.assertNotIn(secret, html)
 
+    def test_06b_direct_account_shows_direct_charge_line_without_secrets(self):
+        self.connect_account(self.a)
+        MercadoPagoAccount.objects.filter(venue=self.a).update(direct=True)
+        html = self.client.get(self.url("venue-integrations")).content.decode()
+        self.assertIn("Cobro directo: toda la venta entra a esta cuenta, sin reparto de comisión.", html)
+        self.assertIn("Reconectar", html)  # el botón sigue disponible
+        for secret in (ACCESS, REFRESH, PUBLIC_KEY):
+            self.assertNotIn(secret, html)
+        other = self.client.get(self.url("venue-integrations", "b")).content.decode()
+        self.assertNotIn("Cobro directo:", other)
+        MercadoPagoAccount.objects.filter(venue=self.a).update(direct=False)
+        self.assertNotIn("Cobro directo:", self.client.get(self.url("venue-integrations")).content.decode())
+
     def test_07_whatsapp_and_email_stay_disabled(self):
         html = self.client.get(self.url("venue-integrations")).content.decode()
         self.assertEqual(html.count("Disponible cuando se habilite la integración."), 2)

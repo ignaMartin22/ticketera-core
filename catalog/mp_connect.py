@@ -116,6 +116,8 @@ def renew_account(account_id):
     """
     with transaction.atomic():
         account = MercadoPagoAccount.objects.select_for_update().get(pk=account_id)
+        if account.direct:
+            return account, True  # credenciales propias: no vencen ni se renuevan
         if account.needs_reconnect:
             return account, False
         if not _due(account):
@@ -143,6 +145,7 @@ def renew_account(account_id):
 def get_access_token(venue):
     """Access token en claro del boliche, renovado si le quedan menos de 30 días.
 
+    Una cuenta de cobro directo devuelve su token siempre (no vence ni se renueva).
     Mientras el token no haya vencido lo devuelve siempre: `needs_reconnect` es un aviso
     para el panel, no un corte. Si le quedan menos de 30 días y no hay que reconectar,
     intenta renovar antes (un fallo de renovación no impide devolver el token vigente).
@@ -152,10 +155,11 @@ def get_access_token(venue):
     account = MercadoPagoAccount.objects.filter(venue=venue).first()
     if account is None:
         raise MercadoPagoNotConnected(venue.slug)
-    if _due(account) and not account.needs_reconnect:
-        account, _ = renew_account(account.pk)
-    if account.expires_at <= timezone.now():
-        raise MercadoPagoNotConnected(venue.slug)
+    if not account.direct:
+        if _due(account) and not account.needs_reconnect:
+            account, _ = renew_account(account.pk)
+        if account.expires_at <= timezone.now():
+            raise MercadoPagoNotConnected(venue.slug)
     try:
         return crypto.decrypt(account.access_token)
     except crypto.TokenCryptoError as exc:
@@ -258,6 +262,7 @@ def _store_account(venue, code):
         account.mp_user_id = int(data["user_id"])
         account.public_key = data.get("public_key") or ""
         account.live_mode = bool(data.get("live_mode", False))
+        account.direct = False  # conectar por OAuth reemplaza el cobro directo
         with transaction.atomic():
             account.save()
             account.refresh_from_db()

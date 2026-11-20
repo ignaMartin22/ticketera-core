@@ -56,6 +56,16 @@ Requisitos para los tokens:
 - Nunca se muestran en el panel, en el admin, en la API ni en los logs.
 - No viven en `VenueIntegration`: van en un modelo aparte, para que listar el estado no cargue secretos.
 
+## Cobro directo
+
+Segundo modo de cobro, alternativo a OAuth: la plataforma carga a mano el access token de UNA cuenta de Mercado Pago (típicamente la propia) y toda la venta del boliche entra a esa cuenta, sin reparto. Se usa cuando no hay una cuenta conectada por OAuth (por ejemplo, para cobrar con la cuenta de la plataforma o probar con una cuenta de prueba).
+
+- Se carga con `manage.py mp_set_own_account <slug> [--produccion]` (token por entrada estándar). `MercadoPagoAccount.direct` queda en `True`.
+- No se manda `marketplace_fee`: la comisión, si la hay, se liquida por fuera.
+- Las credenciales propias no vencen ni se renuevan: `get_access_token` devuelve el token siempre, y `refresh_mp_tokens` y el aviso `application.deauthorized` no tocan estas cuentas.
+- Conectar el boliche por OAuth reemplaza el cobro directo (la cuenta pasa a `direct=False`).
+- El panel muestra, en la tarjeta de Mercado Pago, que el boliche cobra en modo directo.
+
 ## Pendiente
 
 - WhatsApp y email.

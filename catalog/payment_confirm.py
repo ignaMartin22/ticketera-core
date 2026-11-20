@@ -196,7 +196,7 @@ def webhook(request):
         if user_id is None:
             return _json_error("invalid_request", 400)
         now = timezone.now()
-        accounts = MercadoPagoAccount.objects.filter(mp_user_id=user_id)
+        accounts = MercadoPagoAccount.objects.filter(mp_user_id=user_id, direct=False)  # el aviso es del flujo OAuth
         venue_ids = list(accounts.values_list("venue_id", flat=True))
         accounts.update(needs_reconnect=True, expires_at=now, updated_at=now)
         mp_connect.mark_expired(venue_ids)
