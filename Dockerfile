@@ -19,7 +19,8 @@ COPY --chown=app:app . .
 RUN DJANGO_SECRET_KEY=build-only-placeholder \
     POSTGRES_DB=build POSTGRES_USER=build POSTGRES_PASSWORD=build \
     python manage.py collectstatic --noinput \
-    && chown -R app:app /app/staticfiles
+    && chown -R app:app /app/staticfiles \
+    && mkdir -p /app/media && chown app:app /app/media
 
 USER app
 EXPOSE 8000

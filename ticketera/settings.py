@@ -78,6 +78,9 @@ LOGIN_URL = "backoffice:login"
 LOGIN_REDIRECT_URL = "backoffice:venue-list"
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+# Archivos subidos (portadas de las fechas). En el servidor es un volumen de Docker.
+MEDIA_URL = "/media/"
+MEDIA_ROOT = Path(os.environ.get("DJANGO_MEDIA_ROOT", BASE_DIR / "media"))
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
     # El manifiesto de whitenoise exige collectstatic: en desarrollo y tests se sirven los archivos tal cual.

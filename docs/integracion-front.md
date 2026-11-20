@@ -47,6 +47,7 @@ type Event = {
   slug: string; venueSlug: string; title: string;
   lineup: string[]; description: string; startsAt: string;
   doorsNote: string; ageLimit: number; dressCode: string | null;
+  cover: string | null;           // URL absoluta del flyer (WebP), o null si la fecha no tiene
   ticketTypes: {
     id: string;                   // slug del tipo, único dentro del evento
     name: string; description: string;
@@ -280,7 +281,9 @@ Va en `Authorization: Bearer <token>`. Sirve **el token de `POST /api/v1/auth/lo
 | `POST /api/v1/manage/venues/<boliche>/events/` | Alta de la fecha con sus entradas. Responde `201 { event }`. |
 | `GET /api/v1/manage/venues/<boliche>/events/<evento>/` | Detalle `{ event }` con los tipos de entrada. |
 | `PATCH /api/v1/manage/venues/<boliche>/events/<evento>/` | Edición parcial (incluye pausar la venta). Responde `200 { event }`. |
-| `DELETE /api/v1/manage/venues/<boliche>/events/<evento>/` | Baja, solo sin ventas ni pedidos. Responde `204`. |
+| `DELETE /api/v1/manage/venues/<boliche>/events/<evento>/` | Baja, solo sin ventas ni pedidos. Responde `204` y borra su portada. |
+| `POST /api/v1/manage/venues/<boliche>/events/<evento>/cover/` | Sube la portada (ver abajo). Responde `200 { cover }`. |
+| `DELETE /api/v1/manage/venues/<boliche>/events/<evento>/cover/` | Saca la portada. Responde `200 { cover: null }`. |
 
 Las rutas de Mercado Pago (sección 5) viven bajo el mismo prefijo `manage/venues/<boliche>/mercadopago/`.
 
@@ -323,10 +326,19 @@ type ManagedEvent = {
   status: "finished" | "paused" | "sold_out" | "on_sale";
   // solo en el detalle, el alta y la edición:
   lineup: string[]; description: string; doorsNote: string; ageLimit: number; dressCode: string | null;
+  cover: string | null;
   ticketTypes: { id: string; name: string; kind: "common" | "vip"; description: string; price: number;
                  capacity: number; sold: number; reserved: number; isActive: boolean }[];
 };
 ```
+
+### Portada de la fecha
+
+`POST .../events/<evento>/cover/` con `multipart/form-data` y el archivo en el campo `file` (JPEG, PNG o WebP, hasta 8 MB). El back la gira según el EXIF, la achica a 1600 px de lado mayor, la pasa a WebP y reemplaza la anterior. La respuesta trae la URL nueva: cambia en cada subida, así que se puede cachear para siempre.
+
+La URL es `PUBLIC_API_URL` + `/media/eventos/<boliche>/<evento>-<sufijo>.webp`, la sirve el mismo back con `Cache-Control: immutable`, y aparece como `cover` en el catálogo público y en la API de gestión. En el servidor, los archivos viven en el volumen `media` de Docker y `deploy/backup.sh` los guarda junto con la base.
+
+Errores propios: `400 invalid_cover` (falta el archivo, no es una imagen o es de otro formato) y `413 cover_too_large` (más de 8 MB o de 60 megapíxeles).
 
 ### Errores
 
