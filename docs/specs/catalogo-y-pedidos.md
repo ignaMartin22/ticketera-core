@@ -76,6 +76,8 @@ API pública que consume el repo de cada cliente (TicketJuy para Infinity) desde
 - `POST .../orders/<uuid>/payment/` crea el link de pago (order de Checkout Pro) con el token del boliche y la comisión de la plataforma. Ver [Comisiones](comisiones.md).
 - **Debe:** el webhook de Mercado Pago confirma cada pago una sola vez. Al confirmar, el pedido pasa a `paid`, se emiten las entradas (una por unidad, con QR firmado de un solo uso) y deja de contarse como reserva vigente. Si la reserva venció, se emite solo si queda cupo.
 - Los pedidos con importe 0 se marcan pagados y emiten sus entradas al reservar.
+- **Debe:** al emitir las entradas, el comprador recibe un mail con un QR por entrada (el mismo texto firmado que valida la portería) y el link a la página de su pedido. Sale después de confirmar la transacción: si la emisión se deshace, no sale.
+- **Debe:** un error al mandar el mail no afecta el pago ni las entradas. El pedido queda con `tickets_emailed_at` vacío y `manage.py send_ticket_emails` lo reintenta pasados 5 minutos. Un pedido que ya recibió el mail no se reenvía solo; desde el admin se puede reenviar a mano.
 - `GET` del pedido devuelve `status: paid`, las entradas con su texto de QR y `paymentReview`.
 
 ## Admin del catálogo

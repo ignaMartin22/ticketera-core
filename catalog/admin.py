@@ -5,6 +5,7 @@ from django.utils import timezone
 
 from .models import ApiToken, Event, Membership, Order, Payment, Ticket, TicketType, Venue
 from .orders import OrderConflict
+from .ticket_email import send_ticket_email
 from .tickets import issue_tickets
 
 
@@ -138,9 +139,9 @@ class TicketTypeAdmin(VenueCatalogAdmin):
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
-    list_display = ["event", "buyer_name", "buyer_email", "buyer_phone", "status", "created_at"]
+    list_display = ["event", "buyer_name", "buyer_email", "buyer_phone", "status", "tickets_emailed_at", "created_at"]
     list_select_related = ["event", "event__venue"]
-    actions = ["mark_paid_and_issue"]
+    actions = ["mark_paid_and_issue", "resend_ticket_email"]
 
     def has_module_permission(self, request):
         return managed_venues(request.user).exists()
@@ -187,6 +188,24 @@ class OrderAdmin(admin.ModelAdmin):
                 issued += 1
         if issued:
             self.message_user(request, f"Entradas emitidas en {issued} pedido(s).", level=messages.SUCCESS)
+
+    @admin.action(description="Reenviar las entradas por email", permissions=["view"])
+    def resend_ticket_email(self, request, queryset):
+        sent = failed = 0
+        for order in queryset.filter(paid_at__isnull=False):
+            if send_ticket_email(order.pk, force=True):
+                sent += 1
+            else:
+                failed += 1
+        if sent:
+            self.message_user(request, f"Entradas reenviadas en {sent} pedido(s).", level=messages.SUCCESS)
+        if failed:
+            self.message_user(
+                request, f"No salió el mail de {failed} pedido(s): revisá el registro del servidor.",
+                level=messages.ERROR,
+            )
+        if not sent and not failed:
+            self.message_user(request, "Ningún pedido pagado en la selección.", level=messages.WARNING)
 
 
 @admin.register(Payment)

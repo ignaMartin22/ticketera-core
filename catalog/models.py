@@ -217,6 +217,9 @@ class Order(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField()
     paid_at = models.DateTimeField(null=True, blank=True)
+    tickets_emailed_at = models.DateTimeField(
+        null=True, blank=True, help_text="Cuándo salió el mail con las entradas al comprador.",
+    )
     platform_fee = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     mp_order_id = models.CharField(max_length=64, blank=True)
     mp_init_point = models.URLField(max_length=500, blank=True)

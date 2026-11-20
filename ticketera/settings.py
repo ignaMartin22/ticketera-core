@@ -119,6 +119,21 @@ MP_CONNECT_RETURN_URL = os.environ.get("MP_CONNECT_RETURN_URL", "/")
 MP_TEST_TOKENS = os.environ.get("MP_TEST_TOKENS") == "1"
 PUBLIC_API_URL = os.environ.get("PUBLIC_API_URL", "").rstrip("/")
 FRONT_BASE_URL = os.environ.get("FRONT_BASE_URL", "").rstrip("/")
+# Mail de entradas al comprador. Sin DJANGO_EMAIL_HOST, en desarrollo los mails se imprimen en la
+# consola; en el servidor no salen y quedan pendientes para `manage.py send_ticket_emails`.
+EMAIL_HOST = os.environ.get("DJANGO_EMAIL_HOST", "")
+EMAIL_BACKEND = os.environ.get(
+    "DJANGO_EMAIL_BACKEND",
+    "django.core.mail.backends.smtp.EmailBackend"
+    if EMAIL_HOST or not DEBUG
+    else "django.core.mail.backends.console.EmailBackend",
+)
+EMAIL_PORT = int(os.environ.get("DJANGO_EMAIL_PORT", "587"))
+EMAIL_HOST_USER = os.environ.get("DJANGO_EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("DJANGO_EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = os.environ.get("DJANGO_EMAIL_USE_TLS", "1") == "1"
+EMAIL_TIMEOUT = 10
+DEFAULT_FROM_EMAIL = os.environ.get("DJANGO_DEFAULT_FROM_EMAIL", "TicketJuy <entradas@localhost>")
 # Clave secreta de la aplicación para validar la firma del webhook de pagos.
 # Sin ella el webhook responde 503 mp_not_configured.
 MP_WEBHOOK_SECRET = os.environ.get("MP_WEBHOOK_SECRET", "")

@@ -1,0 +1,16 @@
+{% load tz %}{% autoescape off %}Hola{% if order.buyer_name %} {{ order.buyer_name }}{% endif %}:
+
+Ya tenés tus entradas para {{ event.title }}.
+
+{% timezone "America/Argentina/Jujuy" %}{{ event.starts_at|date:"l j \d\e F, H:i"|capfirst }} h{% endtimezone %}
+{{ venue.name }} · {{ venue.address }}{% if venue.city not in venue.address %}, {{ venue.city }}{% endif %}
+{% if event.doors_note %}{{ event.doors_note }}
+{% endif %}
+Mostrá el QR de cada entrada en la puerta. Cada uno se puede usar una sola vez: no lo compartas.
+{% if order_url %}
+Ver tus entradas: {{ order_url }}
+{% endif %}
+{% for entry in entries %}Entrada {{ entry.number }} · {{ entry.type }}
+{% endfor %}
+Pedido {{ short_id }}
+{% endautoescape %}
