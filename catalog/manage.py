@@ -55,7 +55,8 @@ def managed_events(venue):
     return Event.objects.filter(venue=venue).prefetch_related(
         Prefetch(
             "ticket_types",
-            queryset=TicketType.objects.with_reserved(timezone.now()).order_by("pk"),
+            # Los tipos de las listas de RRPP los maneja la lista, no el panel de tipos de entrada.
+            queryset=TicketType.objects.exclude(kind=TicketType.Kind.LIST).with_reserved(timezone.now()).order_by("pk"),
             to_attr="managed_ticket_types",
         )
     )
@@ -240,7 +241,7 @@ def ticket_type_fields(item, creating):
         fields["name"] = name
     if creating or "kind" in item:
         kind = item.get("kind", TicketType.Kind.COMMON)
-        if kind not in TicketType.Kind.values:
+        if kind not in TicketType.Kind.values or kind == TicketType.Kind.LIST:
             raise ValidationError("invalid_kind")
         fields["kind"] = kind
     if creating or "price" in item:
@@ -367,10 +368,10 @@ def update_ticket_types(event, items):
     # Las reservas bloquean las mismas filas: la edición espera a cualquier compra en curso.
     existing = {
         ticket.slug: ticket
-        for ticket in TicketType.objects.select_for_update().filter(event=event)
+        for ticket in TicketType.objects.select_for_update().filter(event=event).exclude(kind=TicketType.Kind.LIST)
     }
     reserved = dict(
-        TicketType.objects.filter(event=event)
+        TicketType.objects.filter(event=event).exclude(kind=TicketType.Kind.LIST)
         .with_reserved(timezone.now())
         .values_list("slug", "reserved")
     )

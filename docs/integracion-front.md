@@ -167,6 +167,7 @@ Respuestas del escaneo:
 | --- | --- | --- | --- |
 | 200 | `admitted` | `ticket: { id, ticketType, holderName, usedAt }` | Ingreso válido. Queda quemada. |
 | 409 | `already_used` | `ticket` con `usedAt` y `usedBy` del primer escaneo | Ya ingresó. |
+| 409 | `list_closed` | `ticket: { id, ticketType, holderName, validUntil }` | Entrada de lista fuera de hora. No se quema (sección 8). |
 | 409 | `wrong_event` | `event: { slug, title, startsAt }` | Es de otra fecha del boliche. No se quema. |
 | 404 | `invalid` | | QR falso, alterado o de otro boliche. |
 
@@ -359,6 +360,72 @@ Errores propios: `400 invalid_cover` (falta el archivo, no es una imagen o es de
 | 409 | `has_orders` | Baja de una fecha que tiene pedidos. |
 
 Con la venta pausada, la API pública sigue mostrando la fecha (`salesOpen: false`) y `POST .../orders/` responde `409 sales_paused`; los pedidos ya reservados siguen pudiendo pagarse.
+
+## 8. Listas de RRPP
+
+Cada boliche trabaja con RRPP que tienen listas. El admin crea, por fecha, una lista por RRPP con un cupo y una hora límite; el RRPP agrega invitados (nombre + mail) y a cada uno le llega su entrada gratis con QR por mail. La entrada de lista solo sirve para ingresar hasta la hora límite.
+
+- Rol nuevo `rrpp` en las membresías (`/auth/login/` y `/auth/me/` lo devuelven en `memberships`). Se asigna desde `/plataforma/boliches/<slug>/equipo/`. Un `rrpp` no tiene acceso a portería ni a la API de gestión.
+- Cada lista es internamente un tipo de entrada `kind: "list"` de precio 0. **No aparece** en el catálogo público, **no se puede reservar** por el endpoint de pedidos (responde `409 ticket_type_unavailable`) y **no aparece** en `ticketTypes` de la API de gestión de fechas (ni se puede crear/editar ahí: `kind: "list"` → `400 invalid_kind`; el slug de un tipo de lista → `400 invalid_ticket_types`). La lista se maneja solo con los endpoints de abajo.
+- Una persona (mail, sin distinguir mayúsculas ni espacios) tiene como máximo una entrada de lista por fecha, sumando todas las listas de esa fecha.
+
+`List` (lo devuelven todos los endpoints):
+
+```json
+{
+  "id": 12, "name": "Lista Juan",
+  "promoter": { "username": "rrpp1", "name": "Juan Pérez" },
+  "quota": 50, "issued": 12, "admitted": 4,
+  "validUntil": "2026-12-05T03:00:00-03:00", "isActive": true,
+  "event": { "slug": "noche-x", "title": "Noche X", "startsAt": "...", "venueSlug": "infinity", "venueName": "Infinity" }
+}
+```
+
+`issued` = entradas emitidas, `admitted` = las que ya ingresaron. `promoter.name` es el nombre completo del usuario o, si no tiene, su `username`.
+
+### Gestión (rol `admin` del boliche; misma autenticación y errores 401/403 que la sección 7)
+
+| Método y ruta | Body | Respuesta |
+|---|---|---|
+| `GET /api/v1/manage/venues/<boliche>/events/<fecha>/lists/` | | `200 { lists: [List] }` |
+| `POST` la misma ruta | `{ name, promoterUsername, quota, validUntil }` | `201 { list: List }` |
+| `PATCH .../lists/<id>/` | parcial: `{ name?, quota?, validUntil?, isActive? }` | `200 { list: List }` |
+| `GET /api/v1/manage/venues/<boliche>/rrpp/` | | `200 { promoters: [{ username, name }] }` (usuarios con rol `rrpp` del boliche, para el selector) |
+
+Validaciones del alta: `name` 1..120, `quota` entero 1..5000, `validUntil` ISO 8601 **con zona** y a futuro, `promoterUsername` = usuario con membresía `rrpp` o `admin` en este boliche.
+
+| Status | `error` | Cuándo |
+|---|---|---|
+| 400 | `invalid_name`, `invalid_quota`, `invalid_valid_until`, `invalid_promoter` | Alta. En el PATCH valen los tres primeros (y `invalid_is_active` si `isActive` no es booleano); `validUntil` puede quedar en el pasado (cierra la lista). |
+| 404 | `event_unavailable` / `list_unavailable` | La fecha o la lista no existe en este boliche. |
+| 409 | `list_exists` | Ese RRPP ya tiene lista en la fecha. |
+| 409 | `quota_below_issued` | PATCH con `quota` menor a lo emitido. |
+
+Una lista inactiva (`isActive: false`) solo impide agregar gente: lo ya emitido sigue valiendo en puerta.
+
+### RRPP (token de `/auth/login/`)
+
+Un RRPP ve solo sus listas, de cualquier boliche. Un `admin` del boliche también puede ver y cargar las listas de su boliche por las rutas con `<id>` (pero `GET /rrpp/lists/` devuelve solo las suyas). Sin token o con token inválido: `401 unauthorized`.
+
+| Método y ruta | Body | Respuesta |
+|---|---|---|
+| `GET /api/v1/rrpp/lists/` | | `200 { lists: [List] }`: sus listas de fechas no terminadas (`startsAt` hasta 24 h atrás en adelante), por fecha |
+| `GET /api/v1/rrpp/lists/<id>/` | | `200 { list: List, guests: [{ name, email, addedAt, usedAt }] }`, más nuevos primero |
+| `POST /api/v1/rrpp/lists/<id>/guests/` | `{ name, email }` | `201 { guest: { name, email, addedAt, usedAt }, list: List }` |
+
+Errores del alta de invitado: `400 invalid_name` (1..150), `400 invalid_email`, `409 already_on_list`, `409 quota_full`, `409 list_closed` (lista inactiva o pasada su `validUntil`). `404 not_found` si la lista no existe o no es del usuario (no se distingue).
+
+### Cambios en lo que ya existía
+
+- `GET .../orders/<uuid>/`: cada ticket suma `validUntil` (ISO, o `null` si no es de lista). Mostralo en la entrada ("Válida hasta las HH:MM").
+- Mail de la entrada: las de lista incluyen "Válida para ingresar hasta las HH:MM del <día>" (hora de Jujuy).
+- Portería, `POST .../scan/`: resultado nuevo `409 list_closed` cuando la entrada es de una lista y ya pasó su `validUntil`. La entrada **no se quema** (si el boliche extiende la hora, vuelve a servir).
+
+```json
+{ "result": "list_closed", "ticket": { "id": "...", "ticketType": "Lista Juan", "holderName": "Ana Gómez", "validUntil": "2026-12-05T03:00:00-03:00" } }
+```
+
+Si la entrada ya había ingresado, sigue respondiendo `already_used`.
 
 ## Pendiente del lado del front
 

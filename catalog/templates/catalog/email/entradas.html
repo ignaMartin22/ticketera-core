@@ -23,6 +23,7 @@
             <tr><td align="center" style="padding:16px;">
               <p style="margin:0 0 8px;font-size:14px;color:#52525b;">Entrada {{ entry.number }} de {{ entries|length }}</p>
               <p style="margin:0 0 12px;font-size:17px;font-weight:bold;">{{ entry.type }}</p>
+              {% if entry.valid_until %}<p style="margin:0 0 12px;font-size:14px;color:#52525b;">{% timezone "America/Argentina/Jujuy" %}Válida para ingresar hasta las {{ entry.valid_until|date:"H:i" }} del {{ entry.valid_until|date:"l j \d\e F" }}{% endtimezone %}.</p>{% endif %}
               <img src="cid:{{ entry.cid }}" width="220" height="220" alt="QR de la entrada {{ entry.number }}" style="display:block;width:220px;height:220px;">
             </td></tr>
           </table>

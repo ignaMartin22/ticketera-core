@@ -72,7 +72,7 @@ def published_events(venue):
     return Event.objects.filter(venue=venue, is_published=True).select_related("venue").prefetch_related(
         Prefetch(
             "ticket_types",
-            queryset=TicketType.objects.filter(is_active=True).with_reserved(timezone.now()).order_by("pk"),
+            queryset=TicketType.objects.filter(is_active=True).exclude(kind=TicketType.Kind.LIST).with_reserved(timezone.now()).order_by("pk"),
             to_attr="public_ticket_types",
         ),
     )
@@ -96,6 +96,15 @@ def event_detail(request, venue_slug, event_slug):
     return JsonResponse({"venue": venue_data(venue), "event": event_data(event)})
 
 
+def ticket_guest_list(ticket):
+    return getattr(ticket.ticket_type, "guest_list", None)
+
+
+def valid_until_iso(ticket):
+    guest_list = ticket_guest_list(ticket)
+    return guest_list.valid_until.isoformat() if guest_list else None
+
+
 def order_data(order, items):
     tickets = []
     if order.paid_at is not None:
@@ -107,8 +116,9 @@ def order_data(order, items):
                 "ticketTypeName": ticket.ticket_type.name,
                 "qr": sign_ticket(ticket.pk),
                 "usedAt": ticket.used_at.isoformat() if ticket.used_at else None,
+                "validUntil": valid_until_iso(ticket),
             }
-            for ticket in order.tickets.select_related("ticket_type")
+            for ticket in order.tickets.select_related("ticket_type__guest_list")
         ]
     else:
         status = "pending_payment" if order.expires_at > timezone.now() else "expired"

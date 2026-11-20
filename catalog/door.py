@@ -86,7 +86,7 @@ def scan(request, venue, user, event_slug):
     except InvalidTicketToken:
         return invalid
     ticket = (
-        Ticket.objects.select_related("event", "ticket_type", "order", "used_by")
+        Ticket.objects.select_related("event", "ticket_type__guest_list", "order", "used_by")
         .filter(pk=ticket_id, event__venue=venue)
         .first()
     )
@@ -96,6 +96,18 @@ def scan(request, venue, user, event_slug):
         return JsonResponse({"result": "wrong_event", "event": event_summary(ticket.event)}, status=409)
 
     now = timezone.now()
+    # La hora límite se evalúa con el mismo `now` con el que se quema: no hay ventana entre el chequeo y el UPDATE.
+    guest_list = getattr(ticket.ticket_type, "guest_list", None)
+    if guest_list is not None and ticket.used_at is None and now > guest_list.valid_until:
+        return JsonResponse({
+            "result": "list_closed",
+            "ticket": {
+                "id": str(ticket.pk),
+                "ticketType": ticket.ticket_type.name,
+                "holderName": ticket.order.buyer_name,
+                "validUntil": guest_list.valid_until.isoformat(),
+            },
+        }, status=409)
     burned = Ticket.objects.filter(pk=ticket.pk, used_at__isnull=True).update(used_at=now, used_by=user)
     if burned:
         ticket.used_at = now
