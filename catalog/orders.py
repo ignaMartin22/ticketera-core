@@ -38,7 +38,8 @@ def reserve_order(venue_slug, event_slug, buyer, quantities, idempotency_key):
         raise OrderConflict("sales_paused")
 
     ticket_types = list(
-        TicketType.objects.select_for_update().filter(event=event, slug__in=quantities).order_by("pk"),
+        TicketType.objects.select_for_update()
+        .filter(event=event, slug__in=quantities).exclude(kind=TicketType.Kind.LIST).order_by("pk"),
     )
     if len(ticket_types) != len(quantities) or any(not ticket.is_active for ticket in ticket_types):
         raise OrderConflict("ticket_type_unavailable")

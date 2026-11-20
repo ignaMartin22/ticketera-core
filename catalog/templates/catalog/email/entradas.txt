@@ -11,6 +11,7 @@ Mostrá el QR de cada entrada en la puerta. Cada uno se puede usar una sola vez:
 Ver tus entradas: {{ order_url }}
 {% endif %}
 {% for entry in entries %}Entrada {{ entry.number }} · {{ entry.type }}
-{% endfor %}
+{% if entry.valid_until %}Válida para ingresar hasta las {% timezone "America/Argentina/Jujuy" %}{{ entry.valid_until|date:"H:i" }} del {{ entry.valid_until|date:"l j \d\e F" }}{% endtimezone %}.
+{% endif %}{% endfor %}
 Pedido {{ short_id }}
 {% endautoescape %}

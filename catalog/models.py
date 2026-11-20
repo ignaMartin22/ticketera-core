@@ -119,6 +119,7 @@ class Membership(models.Model):
         ADMIN = "admin", "Administración"
         DOOR = "door", "Puerta"
         CASHIER = "cashier", "Caja"
+        RRPP = "rrpp", "RRPP"
 
     venue = models.ForeignKey(Venue, on_delete=models.CASCADE, related_name="memberships")
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
@@ -186,6 +187,7 @@ class TicketType(models.Model):
     class Kind(models.TextChoices):
         COMMON = "common", "Común"
         VIP = "vip", "VIP"
+        LIST = "list", "Lista"
 
     event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name="ticket_types")
     slug = models.SlugField()
@@ -204,6 +206,27 @@ class TicketType(models.Model):
             models.UniqueConstraint(fields=["event", "slug"], name="unique_ticket_slug_per_event"),
             models.CheckConstraint(condition=Q(price__gte=0), name="ticket_price_nonnegative"),
             models.CheckConstraint(condition=Q(sold__lte=F("capacity")), name="ticket_sold_within_capacity"),
+        ]
+
+    def __str__(self):
+        return f"{self.event} / {self.name}"
+
+
+class GuestList(models.Model):
+    """Lista de un RRPP para una fecha. El cupo es `ticket_type.capacity` y lo emitido, `ticket_type.sold`."""
+
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name="guest_lists")
+    promoter = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="guest_lists")
+    name = models.CharField(max_length=120)
+    ticket_type = models.OneToOneField(TicketType, on_delete=models.CASCADE, related_name="guest_list")
+    valid_until = models.DateTimeField(help_text="Hora límite para ingresar con una entrada de esta lista.")
+    is_active = models.BooleanField(default=True, help_text="Inactiva: no se puede agregar gente (lo emitido sigue valiendo).")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["pk"]
+        constraints = [
+            models.UniqueConstraint(fields=["event", "promoter"], name="unique_guest_list_per_promoter_event"),
         ]
 
     def __str__(self):

@@ -39,15 +39,17 @@ def qr_png(text):
 
 def build_message(order):
     event = order.event
-    tickets = list(order.tickets.select_related("ticket_type").order_by("created_at", "pk"))
+    tickets = list(order.tickets.select_related("ticket_type__guest_list").order_by("created_at", "pk"))
     entries = [
         {
             "number": number,
             "type": ticket.ticket_type.name,
             "code": sign_ticket(ticket.pk),
             "cid": f"entrada-{number}@ticketera",
+            "valid_until": guest_list.valid_until if guest_list else None,
         }
         for number, ticket in enumerate(tickets, start=1)
+        for guest_list in [getattr(ticket.ticket_type, "guest_list", None)]
     ]
     context = {
         "order": order, "event": event, "venue": event.venue, "entries": entries,

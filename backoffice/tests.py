@@ -110,6 +110,11 @@ class BackofficeTests(TestCase):
         self.assertFalse(user.has_usable_password())
         self.assertTrue(Membership.objects.filter(venue=self.other, user=user, role="admin").exists())
 
+    def test_rrpp_role_can_be_assigned(self):
+        url = reverse("backoffice:venue-team", args=["other"])
+        self.client.post(url, {"email": "rrpp@otro.test", "name": "Rita", "role": "rrpp"})
+        self.assertTrue(Membership.objects.filter(venue=self.other, user__email="rrpp@otro.test", role="rrpp").exists())
+
     def test_existing_user_changes_role_and_can_be_removed(self):
         url = reverse("backoffice:venue-team", args=["other"])
         self.client.post(url, {"email": "admin@moon.test", "role": "door"})
