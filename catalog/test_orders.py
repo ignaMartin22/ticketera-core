@@ -92,6 +92,25 @@ class OrderTests(TestCase):
         self.assertEqual(create_order(self.client, key, name="Juan Pérez").status_code, 200)
         self.assertEqual(create_order(self.client, key, phone="+5493884000000").status_code, 409)
 
+    def test_phone_is_optional(self):
+        TicketType.objects.filter(pk=self.ticket.pk).update(capacity=10)
+        # Sin la clave "phone", vacío o null: el pedido se crea y el teléfono queda vacío.
+        response = self.client.post(
+            reverse("order-create", args=["moon", "fecha"]),
+            {"email": "buyer@example.com", "name": "Sin Teléfono", "items": [{"ticketTypeId": "general", "quantity": 1}]},
+            content_type="application/json",
+            headers={"Idempotency-Key": str(uuid4())},
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(Order.objects.get(pk=response.json()["order"]["id"]).buyer_phone, "")
+        for empty in ("", None):
+            response = create_order(self.client, uuid4(), quantity=1, phone=empty)
+            self.assertEqual(response.status_code, 201)
+            self.assertEqual(Order.objects.get(pk=response.json()["order"]["id"]).buyer_phone, "")
+        # Si viene, se sigue validando.
+        self.assertEqual(create_order(self.client, uuid4(), phone=3884123456).json()["error"], "invalid_phone")
+        self.assertEqual(create_order(self.client, uuid4(), phone="388-412").json()["error"], "invalid_phone")
+
     def test_sales_paused_event_rejects_new_reservations(self):
         key = uuid4()
         self.assertEqual(create_order(self.client, key, quantity=1).status_code, 201)
