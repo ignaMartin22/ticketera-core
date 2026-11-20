@@ -163,7 +163,7 @@ Agregar:
 */10 * * * * docker compose -f /opt/ticketjuy/deploy/docker-compose.yml exec -T web python manage.py send_ticket_emails >> /opt/ticketjuy/ticket_emails.log 2>&1
 ```
 
-**Mail de entradas.** Cargar las variables `DJANGO_EMAIL_*` y `DJANGO_DEFAULT_FROM_EMAIL` en `deploy/.env` con el SMTP del proveedor y recrear `web`. El remitente tiene que ser de un dominio verificado en el proveedor (SPF y DKIM). Para probar: comprar una entrada y revisar que llegue el mail; si no llega, `docker compose -f deploy/docker-compose.yml logs web | grep 'mail de entradas'` muestra el error. Para reenviar a un comprador: admin de Django → Pedidos → "Reenviar las entradas por email".
+**Mail de entradas.** Paso a paso en [Mail con Resend](mail-resend.md). Cargar las variables `DJANGO_EMAIL_*` y `DJANGO_DEFAULT_FROM_EMAIL` en `deploy/.env` con el SMTP del proveedor y recrear `web`. El remitente tiene que ser de un dominio verificado en el proveedor (SPF y DKIM). Para probar: comprar una entrada y revisar que llegue el mail; si no llega, `docker compose -f deploy/docker-compose.yml logs web | grep 'mail de entradas'` muestra el error. Para reenviar a un comprador: admin de Django → Pedidos → "Reenviar las entradas por email".
 
 Probar a mano una vez: `/opt/ticketjuy/deploy/backup.sh` debe imprimir `Backup OK: /opt/ticketjuy/backups/ticketjuy-<fecha>.sql.gz`. Se conservan 7 días de backups. Restaurar uno:
 

@@ -84,6 +84,10 @@ class TicketEmailTests(TestCase):
             issue_tickets(recent.pk)  # recién pagado: su envío sale con la confirmación
         Order.objects.filter(pk=self.order.pk).update(paid_at=timezone.now() - timedelta(minutes=10))
         unpaid = make_order(self.event, [(self.vip, 1)])
+        stale = make_order(self.event, [(self.vip, 1)])
+        with patch("catalog.ticket_email.send_after_commit"):
+            issue_tickets(stale.pk)
+        Order.objects.filter(pk=stale.pk).update(paid_at=timezone.now() - timedelta(days=3))
 
         out = StringIO()
         call_command("send_ticket_emails", stdout=out)
@@ -91,12 +95,21 @@ class TicketEmailTests(TestCase):
         self.assertEqual([m.to for m in mail.outbox], [["b@example.com"]])
         self.order.refresh_from_db()
         self.assertIsNotNone(self.order.tickets_emailed_at)
-        for order in (recent, unpaid):
+        for order in (recent, unpaid, stale):
             order.refresh_from_db()
             self.assertIsNone(order.tickets_emailed_at)
 
         call_command("send_ticket_emails", stdout=StringIO())
         self.assertEqual(len(mail.outbox), 1)
+
+    @override_settings(TICKETS_REPLY_TO="ayuda@example.com")
+    def test_reply_to_goes_to_a_monitored_inbox(self):
+        self.issue()
+        self.assertEqual(mail.outbox[0].reply_to, ["ayuda@example.com"])
+
+    def test_without_reply_to_replies_go_to_the_sender(self):
+        self.issue()
+        self.assertEqual(mail.outbox[0].reply_to, [])
 
     @override_settings(FRONT_BASE_URL="")
     def test_without_front_url_the_mail_still_has_the_qrs(self):

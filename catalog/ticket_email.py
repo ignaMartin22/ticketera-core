@@ -19,6 +19,9 @@ logger = logging.getLogger(__name__)
 
 # El reintento deja tranquilos los pedidos recién pagados: su envío sale con la confirmación.
 RETRY_AFTER = timedelta(minutes=5)
+# Pasado este plazo deja de reintentar (por ejemplo, un email mal escrito o un remitente sin
+# verificar): esos pedidos se reenvían a mano desde el admin.
+RETRY_WINDOW = timedelta(days=2)
 
 
 def order_url(order):
@@ -54,6 +57,7 @@ def build_message(order):
         subject=f"Tus entradas para {event.title}",
         body=render_to_string("catalog/email/entradas.txt", context),
         to=[order.buyer_email],
+        reply_to=[settings.TICKETS_REPLY_TO] if settings.TICKETS_REPLY_TO else None,
     )
     message.attach_alternative(render_to_string("catalog/email/entradas.html", context), "text/html")
     # Las imágenes van dentro del mail (cid:) para que se vean sin descargar nada.
@@ -93,6 +97,6 @@ def send_after_commit(order_id):
 def pending_orders(now=None):
     now = now or timezone.now()
     return Order.objects.filter(
-        paid_at__isnull=False, paid_at__lte=now - RETRY_AFTER,
+        paid_at__isnull=False, paid_at__lte=now - RETRY_AFTER, paid_at__gt=now - RETRY_WINDOW,
         tickets_emailed_at__isnull=True, tickets__isnull=False,
     ).distinct()

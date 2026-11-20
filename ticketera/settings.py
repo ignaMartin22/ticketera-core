@@ -134,6 +134,8 @@ EMAIL_HOST_PASSWORD = os.environ.get("DJANGO_EMAIL_HOST_PASSWORD", "")
 EMAIL_USE_TLS = os.environ.get("DJANGO_EMAIL_USE_TLS", "1") == "1"
 EMAIL_TIMEOUT = 10
 DEFAULT_FROM_EMAIL = os.environ.get("DJANGO_DEFAULT_FROM_EMAIL", "TicketJuy <entradas@localhost>")
+# A dónde llegan las respuestas de los compradores al mail de entradas (vacío: al remitente).
+TICKETS_REPLY_TO = os.environ.get("DJANGO_TICKETS_REPLY_TO", "")
 # Clave secreta de la aplicación para validar la firma del webhook de pagos.
 # Sin ella el webhook responde 503 mp_not_configured.
 MP_WEBHOOK_SECRET = os.environ.get("MP_WEBHOOK_SECRET", "")
