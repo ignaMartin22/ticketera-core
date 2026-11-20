@@ -64,7 +64,11 @@ openssl rand -hex 24                                              # POSTGRES_PAS
 docker run --rm python:3.13-slim sh -c "pip install -q cryptography && python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'"   # MP_TOKEN_ENCRYPTION_KEY
 ```
 
-Completar también `MP_APP_ID`, `MP_CLIENT_SECRET` (de la app de Mercado Pago) y `FRONT_BASE_URL`. Dejar `DJANGO_DEBUG=0`. Verificar:
+Completar también `MP_APP_ID`, `MP_CLIENT_SECRET` (de la app de Mercado Pago) y `FRONT_BASE_URL`. Dejar `DJANGO_DEBUG=0`.
+
+`FRONT_BASE_URL` es a donde Mercado Pago devuelve al comprador después de pagar (`<FRONT_BASE_URL>/<boliche>/<evento>/pedido/<id>`). En el entorno de pruebas es el front de Railway: `https://ticketjuy-production.up.railway.app`. Con `http://localhost:3000` el pago se confirma igual, pero el comprador vuelve a su propia máquina y ve un 404. Después de cambiarla, recrear el contenedor `web` para que la tome (`docker compose -f deploy/docker-compose.yml up -d web`).
+
+Verificar:
 
 ```bash
 ls -l deploy/.env          # -rw------- ...
