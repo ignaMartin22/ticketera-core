@@ -108,6 +108,7 @@ type OrderTicket = {
 ```
 
 - Quien tiene el `id` del pedido ve sus entradas. No lo pongas en logs ni en analíticas.
+- Cuando el pedido queda pagado, el core le manda al comprador un mail con sus entradas (un QR por entrada) y el link a esta página. El checkout puede avisarlo: "Te mandamos las entradas por mail".
 - La respuesta no trae nombre, email ni teléfono del comprador.
 - `qr` se dibuja tal cual, sin modificarlo ni agregarle una URL.
 - **Pedido gratis**: si el total es $0, la respuesta del `POST` ya viene con `status: "paid"` y las entradas. Redirigí a la página del pedido sin pasar por el pago.

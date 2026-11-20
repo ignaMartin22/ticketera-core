@@ -2,6 +2,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from .models import Order, Ticket, TicketType
+from .ticket_email import send_after_commit
 
 
 @transaction.atomic
@@ -41,4 +42,7 @@ def issue_tickets(order_id):
         )
     order.paid_at = now
     order.save(update_fields=["paid_at"])
-    return Ticket.objects.bulk_create(tickets)
+    created = Ticket.objects.bulk_create(tickets)
+    # Se manda después del commit: si la emisión se deshace, no sale ningún mail.
+    send_after_commit(order.pk)
+    return created
