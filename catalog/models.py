@@ -307,5 +307,8 @@ class MercadoPagoAccount(models.Model):
     live_mode = models.BooleanField()
     expires_at = models.DateTimeField()
     needs_reconnect = models.BooleanField(default=False)
+    direct = models.BooleanField(
+        default=False, help_text="Cobro directo: toda la venta entra a esta cuenta, sin marketplace_fee.",
+    )
     connected_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

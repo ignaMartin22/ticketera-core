@@ -13,7 +13,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
 from catalog import mp_connect
-from catalog.models import Membership, Order, OrderItem, TicketType, Venue, VenueIntegration
+from catalog.models import MercadoPagoAccount, Membership, Order, OrderItem, TicketType, Venue, VenueIntegration
 
 from .forms import FeeForm, MemberForm, VenueCreateForm, VenueForm
 from .models import VenueStatusChange
@@ -232,6 +232,7 @@ def member_remove(request, slug, pk):
 def integrations_page(request, venue, **extra):
     return render(request, "backoffice/venue_integrations.html", venue_context(
         venue, "integrations", integrations=integrations_for(venue),
+        mp_direct=MercadoPagoAccount.objects.filter(venue=venue, direct=True).exists(),
         mp_configured=mp_connect.is_configured(), **extra,
     ))
 

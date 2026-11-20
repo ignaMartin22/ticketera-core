@@ -13,7 +13,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
 from . import mp, mp_connect
-from .models import Order
+from .models import MercadoPagoAccount, Order
 
 CENT = Decimal("0.01")
 EXCLUDED_PAYMENT_TYPES = ("ticket", "atm")
@@ -48,7 +48,7 @@ def expiration_time(order, now=None):
     return f"PT{max(1, math.ceil(remaining / 60))}M"
 
 
-def order_body(order, items, fee, total):
+def order_body(order, items, fee, total, direct=False):
     event = order.event
     back_url = f"{settings.FRONT_BASE_URL}/{event.venue.slug}/{event.slug}/pedido/{order.pk}"
     body = {
@@ -77,7 +77,7 @@ def order_body(order, items, fee, total):
             "payment_method": {"not_allowed_types": list(EXCLUDED_PAYMENT_TYPES)},
         },
     }
-    if fee > 0:
+    if fee > 0 and not direct:  # cobro directo: sin reparto, la comisión se liquida por fuera
         body["marketplace_fee"] = _money(fee)
     return body
 
@@ -111,8 +111,11 @@ def order_payment(request, venue_slug, event_slug, order_id):
         items = list(order.items.select_related("ticket_type"))
         total = sum((item.quantity * (item.unit_price + item.unit_service_fee) for item in items), Decimal(0))
         fee = min(platform_fee(items), total)
+        direct = MercadoPagoAccount.objects.filter(venue=venue, direct=True).exists()
         try:
-            mp_order = mp.create_order(access_token, order_body(order, items, fee, total), idempotency_key(order))
+            mp_order = mp.create_order(
+                access_token, order_body(order, items, fee, total, direct), idempotency_key(order),
+            )
             order_id, init_point = str(mp_order["id"]), mp_order["checkout_url"]
             if not mp_order["id"] or not init_point or Decimal(str(mp_order["total_amount"])) != total.quantize(CENT):
                 raise KeyError("order")

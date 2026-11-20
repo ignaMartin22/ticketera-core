@@ -19,6 +19,7 @@
       {% if integration.last_error %}<p class="error">{{ integration.last_error }}</p>{% endif %}
       {% if integration.provider == "mercadopago" %}
         {% if integration.status == "connected" and integration.account_id %}<p class="help">Cuenta de Mercado Pago: {{ integration.account_id }}</p>{% endif %}
+        {% if mp_direct %}<p class="help">Cobro directo: toda la venta entra a esta cuenta, sin reparto de comisión.</p>{% endif %}
         <div class="stack">
           {% if mp_link %}
             <div>

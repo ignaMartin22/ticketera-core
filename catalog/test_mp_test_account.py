@@ -51,6 +51,7 @@ class MpSetTestAccountTests(DoorTestCase):
         account = MercadoPagoAccount.objects.get(venue=self.venue_a)
         self.assertEqual(account.mp_user_id, 2468)
         self.assertFalse(account.live_mode)
+        self.assertTrue(account.direct)  # 14: es un cobro directo en una cuenta de prueba
         self.assertFalse(account.needs_reconnect)
         self.assertGreater(account.expires_at, timezone.now() + timedelta(days=100))
         with mock.patch("catalog.mp.refresh_tokens") as refresh:
@@ -72,7 +73,7 @@ class MpSetTestAccountTests(DoorTestCase):
         integration = VenueIntegration.objects.get(venue=self.venue_a, provider="mercadopago")
         self.assertEqual(integration.status, VenueIntegration.Status.CONNECTED)
         self.assertEqual(integration.account_id, "2468")
-        self.assertEqual(integration.account_label, "TESTVENDEDOR (cuenta de prueba)")
+        self.assertEqual(integration.account_label, "TESTVENDEDOR (cobro directo, cuenta de prueba)")
         self.assertEqual(integration.last_error, "")
         self.assertIsNotNone(integration.connected_at)
         self.assertEqual(integration.expires_at, MercadoPagoAccount.objects.get(venue=self.venue_a).expires_at)
