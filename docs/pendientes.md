@@ -22,8 +22,8 @@ Qué falta para vender una fecha real de Infinity con TicketJuy. Estado al 19/11
    - Reembolsos, y qué pasa con los pagos marcados para revisión (`no_capacity`, `mismatch`, `duplicate`).
    - Botón de pago en la página del pedido de TicketJuy.
 2. **Página de la entrada.** La API ya devuelve las entradas del pedido con el texto del QR. La página `/entrada/[code]` de TicketJuy todavía usa datos de prueba.
-3. **Envío de entradas.** Hecho por email: al emitirse las entradas el core le manda al comprador un mail con un QR por entrada y el link a su pedido, y `send_ticket_emails` reintenta los que fallaron. Queda:
-   - Comprar el dominio de la plataforma y verificarlo en Resend: sin eso solo le llega al mail de la cuenta de Resend. Ver [Mail de entradas](mail.md).
+3. **Envío de entradas.** Hecho por email: al emitirse las entradas el core le manda al comprador un mail con un QR por entrada y el link a su pedido, y `send_ticket_emails` reintenta los que fallaron. Sale por Resend desde `ticketjuy.7cerosports.com` y, si Resend lo rechaza (cupo free de 100 por día), por Brevo, con el mismo dominio autenticado. Ver [Mail de entradas](mail.md). Queda:
+   - Probar el respaldo en la VPS (clave de Resend inválida a propósito) y revisar si Brevo agrega su sello.
    - WhatsApp. La API de WhatsApp Business requiere aprobación de Meta y puede tardar: conviene pedirla ya.
 4. **Escáner de puerta** en el navegador del celular. La API de escaneo y el login del personal, con límite de intentos, están hechos; falta la pantalla en TicketJuy que abre la cámara. Después, el modo sin señal con sincronización al volver, que necesita una regla de operación para cuando dos celulares sin conexión aceptan el mismo QR.
 5. **Protección contra reservas automatizadas** en `POST .../orders/` (captcha o verificación de bots y un límite de intentos). Hoy un bot puede bloquear cupo de a 10 entradas durante 10 minutos, una y otra vez.
