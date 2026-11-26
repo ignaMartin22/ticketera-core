@@ -79,7 +79,15 @@ Requisito: el dominio ya verificado en Resend ([Etapa 2](#etapa-2-dominio-propio
 
    Con `DJANGO_EMAIL_HOST` y `DJANGO_EMAIL_FALLBACK_HOST` cargados, el core usa solo el backend con respaldo (`ticketera.mail.FailoverBackend`). Vaciar `DJANGO_EMAIL_FALLBACK_HOST` lo apaga.
 4. Recrear `web`.
-5. **Probar el respaldo:** cambiar a propósito `DJANGO_EMAIL_HOST_PASSWORD` por una clave inválida, recrear `web` y mandar `sendtestemail` o hacer una compra de prueba. Tiene que llegar igual, y en el log tiene que aparecer el aviso del respaldo. Revisar en ese mail si Brevo agrega su sello ("Sent with Brevo"). Después, volver a poner la clave buena y recrear `web`.
+5. **Probar el respaldo** sin tocar `deploy/.env`: la clave inválida de Resend vale solo para ese comando.
+
+   ```
+   docker compose -f deploy/docker-compose.yml exec -e DJANGO_EMAIL_HOST_PASSWORD=invalida web python manage.py sendtestemail <mail>
+   ```
+
+   Tiene que imprimir el aviso "Falló el SMTP principal; mando por el respaldo…" y el mail tiene que llegar igual (figura en Brevo → Transactional → Logs). Brevo no agrega su sello a los transaccionales.
+
+**Si al crear el remitente Brevo dice que el dominio "ya está configurado como un subdominio de marca":** el subdominio quedó asignado como dominio de marca (links rastreados) de otro dominio de la cuenta, y no puede ser las dos cosas. No hay opción para quitar la marca: hay que eliminar de Brevo el dominio que la tiene y borrar del DNS su CNAME (`<subdominio>` → `...brand.brevosend.com`). Si después el subdominio queda sin autenticar, volver a cargar su TXT `brevo-code` en el nombre del subdominio (el CNAME lo tapaba).
 
 Para ver cuántos mails salieron por el respaldo: `docker compose -f deploy/docker-compose.yml logs web | grep "mando por el respaldo"`.
 
