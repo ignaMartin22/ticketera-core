@@ -1,10 +1,16 @@
 from django.urls import path
 
-from . import guest_lists, manage, mp_connect
+from . import guest_lists, manage, mp_connect, payment_accounts
 
 urlpatterns = [
     path("venues/<slug:venue_slug>/mercadopago/connect/", mp_connect.connect, name="mp-connect"),
     path("venues/<slug:venue_slug>/mercadopago/", mp_connect.account_status, name="mp-status"),
+    path("venues/<slug:venue_slug>/payment-accounts/", payment_accounts.account_list, name="payment-accounts"),
+    path(
+        "venues/<slug:venue_slug>/payment-accounts/<str:provider>/",
+        payment_accounts.account_resource,
+        name="payment-account",
+    ),
     path("venues/<slug:venue_slug>/events/", manage.event_collection, name="manage-event-list"),
     path(
         "venues/<slug:venue_slug>/events/<slug:event_slug>/cover/",
