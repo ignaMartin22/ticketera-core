@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import transaction
 
+from catalog.gateways import CREDENTIAL_FIELDS
 from catalog.models import FeeChange, Membership, Venue
 
 BRAND_FIELDS = ["name", "city", "address", "instagram", "tagline", "maps_url", "accent", "logo", "cover", "flyer_backdrop"]
@@ -142,18 +143,7 @@ class GatewayForm(forms.Form):
     Las claves secretas nunca se vuelven a mostrar: para cambiarlas hay que cargarlas de nuevo.
     """
 
-    FIELDS = {
-        "macro": [
-            ("comercio", "ID de comercio", False, True),
-            ("secret", "Clave secreta (frase)", True, True),
-            ("sucursal", "ID de sucursal", False, False),
-        ],
-        "nave": [
-            ("client_id", "Client ID", False, True),
-            ("client_secret", "Client secret", True, True),
-            ("pos_id", "POS ID", False, True),
-        ],
-    }
+    FIELDS = CREDENTIAL_FIELDS
 
     live_mode = forms.BooleanField(
         label="Credenciales de producción", required=False,
