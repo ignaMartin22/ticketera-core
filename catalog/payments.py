@@ -147,6 +147,8 @@ def order_payment(request, venue_slug, event_slug, order_id):
         if order.mp_init_point:
             return JsonResponse({"initPoint": order.mp_init_point})
         venue = order.event.venue
+        if not settings.PAYMENTS_ALLOW_TEST_MODE and MercadoPagoAccount.objects.filter(venue=venue, live_mode=False).exists():
+            return _error("venue_not_connected", 409)  # cuenta en modo prueba con el modo prueba apagado
         try:
             access_token = mp_connect.get_access_token(venue)
         except mp_connect.MercadoPagoNotConnected:

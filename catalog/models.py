@@ -251,6 +251,12 @@ class Order(models.Model):
     platform_fee = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     mp_order_id = models.CharField(max_length=64, blank=True)
     mp_init_point = models.URLField(max_length=500, blank=True)
+    buyer_ip = models.GenericIPAddressField(
+        null=True, blank=True, help_text="IP del comprador que informó el front (X-Buyer-Ip), si vino.",
+    )
+    payment_synced_at = models.DateTimeField(
+        null=True, blank=True, help_text="Última consulta a la pasarela desde payment/sync/ (freno).",
+    )
 
     class Meta:
         constraints = [
@@ -324,6 +330,7 @@ class DoorLoginFailure(models.Model):
     """Intento fallido de login de portería, para limitar los reintentos por usuario."""
 
     username = models.CharField(max_length=150, db_index=True)
+    ip = models.GenericIPAddressField(null=True, blank=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
 

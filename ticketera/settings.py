@@ -120,6 +120,9 @@ MP_REDIRECT_URI = os.environ.get("MP_REDIRECT_URI", "")
 MP_TOKEN_ENCRYPTION_KEY = os.environ.get("MP_TOKEN_ENCRYPTION_KEY", "")
 MP_CONNECT_RETURN_URL = os.environ.get("MP_CONNECT_RETURN_URL", "/")
 MP_TEST_TOKENS = os.environ.get("MP_TEST_TOKENS") == "1"
+# Por defecto una cuenta de cobro en modo prueba (live_mode=False) no se ofrece, no cobra y no emite
+# entradas. Solo para entornos de prueba: en producción va apagado.
+PAYMENTS_ALLOW_TEST_MODE = os.environ.get("PAYMENTS_ALLOW_TEST_MODE") == "1"
 PUBLIC_API_URL = os.environ.get("PUBLIC_API_URL", "").rstrip("/")
 FRONT_BASE_URL = os.environ.get("FRONT_BASE_URL", "").rstrip("/")
 # Mail de entradas al comprador. Sin DJANGO_EMAIL_HOST, en desarrollo los mails se imprimen en la
@@ -171,3 +174,18 @@ NAVE_CHECKOUT_HOSTS = [
     h.strip() for h in os.environ.get("NAVE_CHECKOUT_HOSTS", "ranty.io,navenegocios.ar,navenegocios.com").split(",")
     if h.strip()
 ]
+
+# Clave compartida con el servidor del front (header X-Front-Key). Vacía = no se exige (opt-in).
+# Con clave, el alta pública de pedidos solo la acepta con ese header, y X-Buyer-Ip pasa a ser confiable.
+FRONT_API_KEY = os.environ.get("FRONT_API_KEY", "")
+
+# Topes contra acaparar cupo y entradas gratis (por evento).
+MAX_PENDING_ORDERS_PER_EMAIL = int(os.environ.get("MAX_PENDING_ORDERS_PER_EMAIL", "2"))
+MAX_PENDING_ORDERS_PER_IP = int(os.environ.get("MAX_PENDING_ORDERS_PER_IP", "5"))
+MAX_FREE_TICKETS_PER_EMAIL = int(os.environ.get("MAX_FREE_TICKETS_PER_EMAIL", "4"))
+MAX_FREE_TICKETS_PER_IP = int(os.environ.get("MAX_FREE_TICKETS_PER_IP", "8"))
+# Freno de payment/sync/: segundos entre consultas a la pasarela y antigüedad máxima de un pedido vencido.
+PAYMENT_SYNC_MIN_SECONDS = int(os.environ.get("PAYMENT_SYNC_MIN_SECONDS", "15"))
+PAYMENT_SYNC_MAX_AGE_HOURS = int(os.environ.get("PAYMENT_SYNC_MAX_AGE_HOURS", "24"))
+# Altas de invitados por RRPP (todas sus listas) en la última hora.
+MAX_GUESTS_PER_PROMOTER_PER_HOUR = int(os.environ.get("MAX_GUESTS_PER_PROMOTER_PER_HOUR", "200"))

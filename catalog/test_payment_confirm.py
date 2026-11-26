@@ -53,6 +53,7 @@ def mp_order(order, user_id=USER_A, order_id=MP_ORDER_ID, status="processed", am
     }
 
 
+@override_settings(PAYMENTS_ALLOW_TEST_MODE=True)
 class Base(TestCase):
     def setUp(self):
         self.venue_a, self.event_a, self.general_a, self.vip_a = make_venue("a")
@@ -194,6 +195,7 @@ class ProcessOrderTests(Base):
         self.assertEqual(process_order(self.acc_a, data).outcome, ISSUED)
 
 
+@override_settings(PAYMENTS_ALLOW_TEST_MODE=True)
 class ConcurrencyTests(TransactionTestCase):
     def test_simultaneous_same_payment_issues_once(self):
         venue, event, general, _ = make_venue("a")
@@ -456,6 +458,7 @@ class OrderDataTests(Base):
 
 
 class ReconcileCommandTests(Base):
+    @override_settings(MAX_PENDING_ORDERS_PER_EMAIL=10)  # el test arma tres pedidos con el mismo mail
     def test_26_command_continues_after_failure(self):
         ok = make_order(self.event_a, {"general": 1})
         empty = make_order(self.event_a, {"general": 1})

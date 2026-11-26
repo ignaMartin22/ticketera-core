@@ -18,10 +18,16 @@ ADAPTERS = {macro.PROVIDER: macro, nave.PROVIDER: nave}
 MERCADOPAGO = "mercadopago"
 
 
+def chargeable(accounts):
+    """Solo las cuentas que pueden cobrar: las de modo prueba únicamente con PAYMENTS_ALLOW_TEST_MODE."""
+    return accounts if settings.PAYMENTS_ALLOW_TEST_MODE else accounts.filter(live_mode=True)
+
+
 def payment_methods(venue):
     """Con qué se puede pagar en este boliche, en el orden en que se muestran."""
-    methods = [MERCADOPAGO] if MercadoPagoAccount.objects.filter(venue=venue, needs_reconnect=False).exists() else []
-    connected = set(GatewayAccount.objects.filter(venue=venue).values_list("provider", flat=True))
+    mp_accounts = chargeable(MercadoPagoAccount.objects.filter(venue=venue, needs_reconnect=False))
+    methods = [MERCADOPAGO] if mp_accounts.exists() else []
+    connected = set(chargeable(GatewayAccount.objects.filter(venue=venue)).values_list("provider", flat=True))
     return methods + [p for p in ADAPTERS if p in connected]
 
 
@@ -39,7 +45,7 @@ def start(order, provider):
     from ..payments import platform_fee  # payments importa este módulo
 
     venue = order.event.venue
-    account = GatewayAccount.objects.get(venue=venue, provider=provider)
+    account = chargeable(GatewayAccount.objects.filter(venue=venue, provider=provider)).get()
     existing = GatewayCharge.objects.filter(order=order, provider=provider).first()
     if existing is not None and existing.checkout_url:
         return existing.checkout_url

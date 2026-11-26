@@ -6,11 +6,14 @@ puede emitir queda registrado como "a revisar" para que el boliche lo resuelva a
 """
 
 import json
+import logging
+from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -27,6 +30,7 @@ from .views import order_data
 CENT = Decimal("0.01")
 MAX_BODY = 64 * 1024
 Outcome = Payment.Outcome
+logger = logging.getLogger(__name__)
 
 
 def _money(value):
@@ -81,6 +85,9 @@ def process_order(account, mp_order):
         record.amount = amount if amount is not None else Decimal(0)
         record.mp_reference = _reference(mp_order)
         approved = record.status == "processed" and record.status_detail == "accredited"
+        if approved and not account.live_mode and not settings.PAYMENTS_ALLOW_TEST_MODE:
+            logger.warning("Pago aprobado de una cuenta no productiva: no emite (order %s).", mp_order_id)
+            approved = False
         if not approved:
             if record.outcome != Outcome.ISSUED:
                 record.outcome = Outcome.NOT_APPROVED
@@ -213,6 +220,27 @@ def webhook(request):
     return JsonResponse({"ok": True})
 
 
+def _may_query_gateway(order):
+    """Freno de payment/sync/: a lo sumo una consulta a la pasarela cada PAYMENT_SYNC_MIN_SECONDS.
+
+    El permiso se toma con un UPDATE condicional (atómico, sin transacción abierta durante la
+    llamada HTTP): dos requests simultáneos no salen los dos. Los pedidos pagados no consultan
+    nada, y los vencidos hace más de PAYMENT_SYNC_MAX_AGE_HOURS tampoco.
+    """
+    now = timezone.now()
+    if order.paid_at is not None or order.expires_at < now - timedelta(hours=settings.PAYMENT_SYNC_MAX_AGE_HOURS):
+        return False
+    claimed = (
+        Order.objects.filter(pk=order.pk, paid_at__isnull=True)
+        .filter(
+            Q(payment_synced_at__isnull=True)
+            | Q(payment_synced_at__lte=now - timedelta(seconds=settings.PAYMENT_SYNC_MIN_SECONDS)),
+        )
+        .update(payment_synced_at=now)
+    )
+    return claimed == 1
+
+
 @csrf_exempt
 @require_POST
 @never_cache
@@ -221,9 +249,10 @@ def order_payment_sync(request, venue_slug, event_slug, order_id):
         Order.objects.select_related("event__venue"),
         pk=order_id, event__slug=event_slug, event__venue__slug=venue_slug,
     )
-    sync_order(order)
-    from . import gateways  # gateways importa este módulo
+    if _may_query_gateway(order):
+        sync_order(order)
+        from . import gateways  # gateways importa este módulo
 
-    gateways.sync_order(Order.objects.select_related("event__venue").get(pk=order_id))
-    order = Order.objects.get(pk=order_id)
+        gateways.sync_order(Order.objects.select_related("event__venue").get(pk=order_id))
+        order = Order.objects.get(pk=order_id)
     return JsonResponse({"order": order_data(order, order.items.all())})

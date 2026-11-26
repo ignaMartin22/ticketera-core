@@ -154,8 +154,13 @@ class OrderAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):
         return False
 
+    # Emitir a mano exige el permiso de cambio sobre Order (superusuario o permiso asignado), no solo
+    # ver. El formulario sigue siendo de solo lectura (get_readonly_fields): no se edita nada.
     def has_change_permission(self, request, obj=None):
-        return False
+        return request.user.has_perm("catalog.change_order") and self.has_view_permission(request, obj)
+
+    def get_readonly_fields(self, request, obj=None):
+        return [field.name for field in self.model._meta.fields]
 
     def has_delete_permission(self, request, obj=None):
         return False
@@ -174,7 +179,7 @@ class OrderAdmin(admin.ModelAdmin):
             return "Pagado"
         return "Pendiente" if obj.expires_at > timezone.now() else "Vencido"
 
-    @admin.action(description="Marcar como pagado y emitir entradas", permissions=["view"])
+    @admin.action(description="Marcar como pagado y emitir entradas", permissions=["change"])
     def mark_paid_and_issue(self, request, queryset):
         issued = 0
         for order in queryset:

@@ -9,6 +9,7 @@ from datetime import timedelta
 from functools import wraps
 from uuid import uuid4
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db import transaction
@@ -21,6 +22,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 from django.contrib.auth import get_user_model
 
+from .client import clean_person_name
 from .manage import venue_admin_required
 from .models import Event, GuestList, Membership, Order, OrderItem, Ticket, TicketType
 from .staff_auth import error, json_body, user_from_request
@@ -312,9 +314,9 @@ def rrpp_guest_create(request, user, list_id):
     data, failure = json_body(request)
     if failure:
         return failure
-    name = data.get("name")
-    name = " ".join(name.split()) if isinstance(name, str) else ""
-    if not 1 <= len(name) <= 150:
+    try:
+        name = clean_person_name(data.get("name"), 150)
+    except ValidationError:
         return error("invalid_name", 400)
     email = data.get("email")
     email = email.strip() if isinstance(email, str) else ""
@@ -327,7 +329,7 @@ def rrpp_guest_create(request, user, list_id):
     try:
         ticket = add_guest(list_pk, name, email)
     except ListConflict as exc:
-        return error(str(exc), 409)
+        return error(str(exc), 429 if str(exc) == "too_many_guests" else 409)
     return JsonResponse({"guest": guest_data(ticket), "list": fresh(list_pk)}, status=201)
 
 
@@ -347,6 +349,11 @@ def add_guest(list_id, name, email):
         raise ListConflict("already_on_list")
     if ticket_type.sold >= ticket_type.capacity:
         raise ListConflict("quota_full")
+    recent = Ticket.objects.filter(
+        ticket_type__guest_list__promoter_id=guest_list.promoter_id, created_at__gt=now - timedelta(hours=1),
+    ).count()
+    if recent >= settings.MAX_GUESTS_PER_PROMOTER_PER_HOUR:
+        raise ListConflict("too_many_guests")
     order = Order.objects.create(
         event=event, buyer_email=email, buyer_name=name, buyer_phone="",
         idempotency_key=uuid4(), expires_at=now,

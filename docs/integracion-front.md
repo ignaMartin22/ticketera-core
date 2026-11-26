@@ -82,9 +82,23 @@ Respuesta `201` (o `200` si es un reintento con la misma clave y el mismo conten
 | --- | --- | --- |
 | 400 | `invalid_email`, `invalid_name`, `invalid_phone`, `invalid_items`, `order_limit_exceeded`, `invalid_request` | Marcar el campo. El máximo es 10 entradas por pedido. |
 | 404 | `event_unavailable` | La fecha ya no se vende. |
+| 403 | `forbidden` | Falta o está mal `X-Front-Key` (solo si el core tiene `FRONT_API_KEY`). Error de integración. |
 | 409 | `insufficient_capacity`, `ticket_type_unavailable` | Cambió el cupo: refrescar y volver a elegir. |
+| 409 | `free_limit_reached` | El mail (o la IP) ya llegó al tope de entradas gratis de la fecha (4 por mail, 8 por IP). |
+| 429 | `too_many_reservations` | El mail (o la IP) ya tiene 2 (5 por IP) pedidos sin pagar vigentes en la fecha: pagar o esperar a que venzan. |
 | 409 | `idempotency_key_reused` | Misma clave con otro contenido: generar una clave nueva. |
 | 413 / 415 | `request_too_large`, `expected_json` | Error de integración. |
+
+`name` no puede tener enlaces ni `://`, `www.`, `/`, `\`, `<`, `>`, `@` ni caracteres de control (`400 invalid_name`). Lo mismo vale para el nombre del invitado de una lista de RRPP.
+
+### Seguridad: clave del front e IP del comprador
+
+Opt-in: solo rige si el core tiene la variable `FRONT_API_KEY`. El servidor de Next manda en cada alta de pedido:
+
+- `X-Front-Key: <clave>`: sin ella (o con otra) el alta responde `403 {"error": "forbidden"}`. Los GET del catálogo y del pedido, `payment/` y `payment/sync/` no la piden (el flujo de Macro lleva el navegador directo al core).
+- `X-Buyer-Ip: <ip>`: la IP real del navegador. El core solo la toma si `X-Front-Key` es correcta; si no, la ignora (nunca usa `X-Forwarded-For`). Con ella aplica los topes por IP, la guarda en el pedido y limita el login del personal por usuario más IP (también acepta estos dos headers en `/auth/login/` y en el login de portería).
+
+Errores nuevos del alta: `429 too_many_reservations` y `409 free_limit_reached` (ver la tabla). En el alta de invitados de RRPP: `429 too_many_guests` (más de 200 altas por hora del mismo RRPP). `payment/sync/` responde igual de siempre pero no consulta a la pasarela si la última consulta fue hace menos de 15 segundos, o si el pedido venció hace más de 24 horas.
 
 ### Consultar: `GET /api/v1/venues/<boliche>/events/<evento>/orders/<uuid>/`
 

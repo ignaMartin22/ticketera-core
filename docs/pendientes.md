@@ -15,6 +15,8 @@ Qué falta para vender una fecha real de Infinity con TicketJuy. Estado al 19/11
 - Despliegue con Docker en una VPS con PostgreSQL, backups y proxy HTTPS (`docs/despliegue-vps.md`).
 - TicketJuy lee el catálogo de esta API y el checkout reserva el cupo (TicketJuy #12). La página del pedido muestra la reserva con el botón de pago deshabilitado.
 
+- Endurecimiento de seguridad: las cuentas de cobro en modo prueba no emiten entradas reales (`PAYMENTS_ALLOW_TEST_MODE`), clave del front e IP del comprador (`FRONT_API_KEY`, `X-Buyer-Ip`), topes de pedidos sin pagar y de entradas gratis por mail e IP, freno de `payment/sync/`, token de personal que se invalida al cambiar la contraseña, límite de login por usuario e IP, nombres sin enlaces, tope de altas por RRPP y acción de admin que exige permiso de cambio.
+
 ## Para vender una fecha real
 
 1. **Mercado Pago con split por boliche.** Hecho: vinculación de la cuenta del boliche por OAuth (por la API de gestión o con el link que genera el panel de la plataforma) con renovación del token, link de pago con la API de Orders y `marketplace_fee` (cargo de servicio más comisión de la plataforma, con los importes guardados en el pedido), confirmación idempotente por webhook, conciliación de pagos sin notificación y emisión de entradas. Ver [conexiones](specs/conexiones.md) y [comisiones](specs/comisiones.md). Queda:
@@ -27,10 +29,19 @@ Qué falta para vender una fecha real de Infinity con TicketJuy. Estado al 19/11
    - Probar el respaldo en la VPS (clave de Resend inválida a propósito) y revisar si Brevo agrega su sello.
    - WhatsApp. La API de WhatsApp Business requiere aprobación de Meta y puede tardar: conviene pedirla ya.
 4. **Escáner de puerta** en el navegador del celular. La API de escaneo y el login del personal, con límite de intentos, están hechos; falta la pantalla en TicketJuy que abre la cámara. Después, el modo sin señal con sincronización al volver, que necesita una regla de operación para cuando dos celulares sin conexión aceptan el mismo QR.
-5. **Protección contra reservas automatizadas** en `POST .../orders/` (captcha o verificación de bots y un límite de intentos). Hoy un bot puede bloquear cupo de a 10 entradas durante 10 minutos, una y otra vez.
+5. **Protección contra reservas automatizadas** (parcial: ya hay clave del front, IP del comprador y topes por mail e IP; falta captcha y un límite por tiempo) en `POST .../orders/` (captcha o verificación de bots y un límite de intentos). Hoy un bot puede bloquear cupo de a 10 entradas durante 10 minutos, una y otra vez.
    - **El límite no puede ser por `REMOTE_ADDR`** (PR #14, retenido). El core recibe los pedidos desde el servidor de Next del repo del cliente, así que esa IP es la de Railway (donde corre el frontend) o la del proxy del deploy del core, no la del comprador. Un límite de 20 por hora e IP cortaría las compras de todo el sitio después de 20 intentos.
    - Opciones: que el front mande la IP del comprador en un encabezado y que el core solo le crea si la request trae la credencial del repo del cliente ([Clientes](specs/clientes.md)), o limitar por email o teléfono del comprador, o por boliche.
    - El contador tiene que vivir en un caché compartido entre workers. `LocMemCache` es por proceso y multiplica el límite por la cantidad de workers de gunicorn.
+
+## Seguridad pendiente
+
+- Referencia de pago separada del UUID del pedido (hoy el UUID del pedido es la referencia externa y el link del pedido).
+- Anular las entradas ante una devolución o contracargo.
+- Límite de intentos o 2FA en `/admin/` y `/plataforma/`.
+- Rate limit en Caddy.
+- Clave propia para firmar el QR (hoy usa la clave secreta de Django).
+- `pip-audit` en CI.
 
 ## Panel y operación
 
