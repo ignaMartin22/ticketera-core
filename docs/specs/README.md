@@ -11,6 +11,7 @@ Describen cómo funciona hoy cada parte del core. Cuando un cambio altera un com
 | [Comisiones](comisiones.md) | Cargo al comprador, comisión de la plataforma e historial | Implementado |
 | [Panel de la plataforma](panel-plataforma.md) | `/plataforma/`: alta de boliches, comisión, equipo y conexiones | Implementado |
 | [Conexiones](conexiones.md) | Mercado Pago, WhatsApp y email por boliche | Modelo listo, OAuth pendiente |
+| [Pasarelas sin reparto](pasarelas.md) | Macro Click de Pago y Nave (Naranja X y Galicia): credenciales, link de pago y confirmación | Implementado sin probar contra los bancos: faltan las credenciales de prueba |
 
 Lo que falta para el piloto con Infinity está en [pendientes](../pendientes.md).
 

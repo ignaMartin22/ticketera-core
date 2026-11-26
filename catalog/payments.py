@@ -1,5 +1,6 @@
 """Link de pago (order de Checkout Pro) de un pedido, creado con el token del boliche."""
 
+import json
 import math
 from decimal import Decimal
 from uuid import NAMESPACE_URL, uuid5
@@ -12,15 +13,49 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
-from . import mp, mp_connect
-from .models import MercadoPagoAccount, Order
+from . import crypto, gateways, mp, mp_connect
+from .models import GatewayAccount, MercadoPagoAccount, Order
 
 CENT = Decimal("0.01")
 EXCLUDED_PAYMENT_TYPES = ("ticket", "atm")
+MERCADOPAGO = "mercadopago"
 
 
 def _error(code, status):
     return JsonResponse({"error": code}, status=status)
+
+
+def _locked_order(venue_slug, event_slug, order_id):
+    """El pedido bloqueado y listo para pagar, o la respuesta de error."""
+    order = (
+        Order.objects.select_for_update(of=("self",))
+        .select_related("event__venue")
+        .filter(pk=order_id, event__slug=event_slug, event__venue__slug=venue_slug)
+        .first()
+    )
+    if order is None:
+        return None, _error("not_found", 404)
+    if order.paid_at is not None:
+        return None, _error("order_already_paid", 409)
+    if order.expires_at <= timezone.now():
+        return None, _error("order_expired", 409)
+    return order, None
+
+
+def _gateway_payment(venue_slug, event_slug, order_id, provider):
+    if not (settings.FRONT_BASE_URL and settings.PUBLIC_API_URL and getattr(settings, "MP_TOKEN_ENCRYPTION_KEY", "")):
+        return _error("gateway_not_configured", 503)
+    with transaction.atomic():
+        order, error = _locked_order(venue_slug, event_slug, order_id)
+        if error is not None:
+            return error
+        try:
+            init_point = gateways.start(order, provider)
+        except GatewayAccount.DoesNotExist:
+            return _error("venue_not_connected", 409)
+        except (gateways.GatewayError, crypto.TokenCryptoError, KeyError):
+            return _error("gateway_unavailable", 502)
+    return JsonResponse({"initPoint": init_point, "provider": provider})
 
 
 def _money(value):
@@ -82,25 +117,33 @@ def order_body(order, items, fee, total, direct=False):
     return body
 
 
+def _provider(request):
+    """El medio de pago elegido, en un cuerpo JSON. Sin él (como manda el front hasta ahora), Mercado Pago."""
+    if request.content_type != "application/json" or not request.body:
+        return MERCADOPAGO
+    try:
+        data = json.loads(request.body)
+    except (ValueError, RecursionError):
+        return None
+    provider = data.get("provider", MERCADOPAGO) if isinstance(data, dict) else None
+    return provider if provider == MERCADOPAGO or provider in gateways.ADAPTERS else None
+
+
 @csrf_exempt
 @require_POST
 @never_cache
 def order_payment(request, venue_slug, event_slug, order_id):
+    provider = _provider(request)
+    if provider is None:
+        return _error("invalid_provider", 400)
+    if provider != MERCADOPAGO:
+        return _gateway_payment(venue_slug, event_slug, order_id, provider)
     if not (settings.FRONT_BASE_URL and mp_connect.is_configured()):
         return mp_connect.not_configured()
     with transaction.atomic():
-        order = (
-            Order.objects.select_for_update(of=("self",))
-            .select_related("event__venue")
-            .filter(pk=order_id, event__slug=event_slug, event__venue__slug=venue_slug)
-            .first()
-        )
-        if order is None:
-            return _error("not_found", 404)
-        if order.paid_at is not None:
-            return _error("order_already_paid", 409)
-        if order.expires_at <= timezone.now():
-            return _error("order_expired", 409)
+        order, error = _locked_order(venue_slug, event_slug, order_id)
+        if error is not None:
+            return error
         if order.mp_init_point:
             return JsonResponse({"initPoint": order.mp_init_point})
         venue = order.event.venue

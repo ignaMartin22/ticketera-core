@@ -9,6 +9,10 @@
       </div>
       {% if integration.provider == "mercadopago" %}
         <p>Cobra las entradas en la cuenta de Mercado Pago del boliche y retiene la comisión de la plataforma en cada pago.</p>
+      {% elif integration.provider == "macro" %}
+        <p>Cobra con el botón de pago de Banco Macro: tarjetas de débito y crédito de todos los bancos y DEBIN. Toda la venta entra a la cuenta del boliche, sin reparto: la comisión se liquida por fuera.</p>
+      {% elif integration.provider == "nave" %}
+        <p>Cobra con el checkout de Nave, la plataforma de cobros de Naranja X y Galicia. Toda la venta entra a la cuenta del boliche, sin reparto: la comisión se liquida por fuera.</p>
       {% elif integration.provider == "whatsapp" %}
         <p>Manda las entradas y los avisos por WhatsApp. Necesita la aprobación de Meta para WhatsApp Business.</p>
       {% else %}
@@ -46,6 +50,36 @@
             <form method="post" action="{% url 'backoffice:venue-mp-disconnect' venue.slug %}">
               {% csrf_token %}
               <button type="submit" class="btn btn-ghost btn-sm btn-danger" data-confirm="¿Desconectar Mercado Pago de {{ venue.name }}? Dejan de cobrarse las entradas hasta que se vuelva a conectar.">Desconectar</button>
+            </form>
+          {% endif %}
+        </div>
+      {% elif integration.gateway_form %}
+        <div class="stack">
+          {% if integration.provider == "macro" %}
+            <p class="help">En el panel de Macro Click de Pago, cargá esta URL de notificación: <code>{{ macro_notify_url }}</code></p>
+          {% else %}
+            <p class="help">La URL de aviso va en cada pago; no hay que cargarla en Nave.</p>
+          {% endif %}
+          {% if gateways_ready %}
+            <details{% if integration.status != "connected" or integration.gateway_form.errors %} open{% endif %}>
+              <summary>{% if integration.status == "connected" %}Reemplazar credenciales{% else %}Cargar credenciales{% endif %}</summary>
+              <form method="post" action="{% url 'backoffice:venue-gateway-save' venue.slug integration.provider %}" class="stack" autocomplete="off">
+                {% csrf_token %}
+                {% include "backoffice/_form_errors.html" with form=integration.gateway_form %}
+                {% for field in integration.gateway_form %}{% include "backoffice/_field.html" %}{% endfor %}
+                <button type="submit" class="btn btn-sm btn-primary">Guardar credenciales</button>
+              </form>
+            </details>
+          {% else %}
+            <div>
+              <button type="button" class="btn btn-sm" disabled>Cargar credenciales</button>
+              <p class="help">Faltan PUBLIC_API_URL o la clave de cifrado en el servidor.</p>
+            </div>
+          {% endif %}
+          {% if integration.status == "connected" %}
+            <form method="post" action="{% url 'backoffice:venue-gateway-disconnect' venue.slug integration.provider %}">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-ghost btn-sm btn-danger" data-confirm="¿Desconectar {{ integration.get_provider_display }} de {{ venue.name }}? Se borran las credenciales y deja de aparecer como medio de pago.">Desconectar</button>
             </form>
           {% endif %}
         </div>

@@ -142,3 +142,25 @@ TICKETS_REPLY_TO = os.environ.get("DJANGO_TICKETS_REPLY_TO", "")
 # Clave secreta de la aplicación para validar la firma del webhook de pagos.
 # Sin ella el webhook responde 503 mp_not_configured.
 MP_WEBHOOK_SECRET = os.environ.get("MP_WEBHOOK_SECRET", "")
+
+# Pasarelas sin reparto (ver docs/specs/pasarelas.md). Las credenciales son de cada boliche y se
+# cargan desde el panel; acá solo van las direcciones de cada entorno, por si el banco las cambia.
+# Los valores por defecto salen de integraciones de terceros y hay que confirmarlos con el banco.
+MACRO_CLICK_URL = os.environ.get("MACRO_CLICK_URL", "https://botonpp.macroclickpago.com.ar/")
+MACRO_CLICK_TEST_URL = os.environ.get("MACRO_CLICK_TEST_URL", "https://sandboxpp.asjservicios.com.ar/")
+MACRO_API_URL = os.environ.get("MACRO_API_URL", "https://botonpp.asjservicios.com.ar:8082/v1")
+MACRO_API_TEST_URL = os.environ.get("MACRO_API_TEST_URL", "https://sandboxpp.asjservicios.com.ar:8082/v1")
+NAVE_AUTH_URL = os.environ.get(
+    "NAVE_AUTH_URL", "https://services.apinaranja.com/security-ms/api/security/auth0/b2b/m2msPrivate",
+)
+NAVE_AUTH_TEST_URL = os.environ.get(
+    "NAVE_AUTH_TEST_URL", "https://homoservices.apinaranja.com/security-ms/api/security/auth0/b2b/m2ms",
+)
+NAVE_API_URL = os.environ.get("NAVE_API_URL", "https://api.ranty.io/api")
+NAVE_API_TEST_URL = os.environ.get("NAVE_API_TEST_URL", "https://api-sandbox.ranty.io/api")
+NAVE_AUDIENCE = os.environ.get("NAVE_AUDIENCE", "https://naranja.com/ranty/merchants/api")
+# Dominios a los que se puede mandar al comprador con el checkout de Nave.
+NAVE_CHECKOUT_HOSTS = [
+    h.strip() for h in os.environ.get("NAVE_CHECKOUT_HOSTS", "ranty.io,navenegocios.ar,navenegocios.com").split(",")
+    if h.strip()
+]

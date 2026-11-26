@@ -450,7 +450,8 @@ class OrderDataTests(Base):
         _, five = queries(flagged)
         self.assertEqual(one, five)
         self.assertEqual(
-            set(data), {"id", "status", "expiresAt", "currency", "total", "items", "tickets", "paymentReview"},
+            set(data),
+            {"id", "status", "expiresAt", "currency", "total", "items", "tickets", "paymentReview", "paymentMethods"},
         )
 
 

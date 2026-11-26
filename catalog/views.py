@@ -19,6 +19,7 @@ from .qr import sign_ticket
 
 # E.164: + y entre 8 y 15 dígitos. El front manda los celulares argentinos como +549XXXXXXXXXX.
 PHONE_RE = re.compile(r"\+[1-9]\d{7,14}")
+REVIEW_OUTCOMES = [Payment.Outcome.NO_CAPACITY, Payment.Outcome.MISMATCH, Payment.Outcome.DUPLICATE]
 
 
 def venue_data(venue):
@@ -106,6 +107,8 @@ def valid_until_iso(ticket):
 
 
 def order_data(order, items):
+    from .gateways import payment_methods  # gateways importa payment_confirm, que importa este módulo
+
     tickets = []
     if order.paid_at is not None:
         status = "paid"
@@ -138,9 +141,9 @@ def order_data(order, items):
             for item in items
         ],
         "tickets": tickets,
-        "paymentReview": order.payments.filter(
-            outcome__in=[Payment.Outcome.NO_CAPACITY, Payment.Outcome.MISMATCH, Payment.Outcome.DUPLICATE],
-        ).exists(),
+        "paymentReview": order.payments.filter(outcome__in=REVIEW_OUTCOMES).exists()
+        or order.gateway_charges.filter(outcome__in=REVIEW_OUTCOMES).exists(),
+        "paymentMethods": payment_methods(order.event.venue) if status == "pending_payment" else [],
     }
 
 

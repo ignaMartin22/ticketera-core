@@ -241,6 +241,16 @@ Respuesta `200`: `{ "initPoint": "https://www.mercadopago.com.ar/checkout/..." }
 
 El link vence junto con la reserva (10 minutos). No se ofrece pago en efectivo.
 
+### Elegir el medio de pago
+
+Además de Mercado Pago, el boliche puede cobrar con Macro Click de Pago y con Nave (Naranja X y Galicia). Ver [pasarelas](specs/pasarelas.md).
+
+- El pedido trae `paymentMethods`: los medios que el boliche tiene conectados, en el orden en que conviene mostrarlos (`"mercadopago"`, `"macro"`, `"nave"`). Va vacío si la reserva no está vigente.
+- Para pedir el link de otro medio, mandá un cuerpo JSON: `{ "provider": "macro" }`. Sin cuerpo es Mercado Pago, como antes.
+- La respuesta suma `provider`: `{ "initPoint": "...", "provider": "macro" }`. Con Macro, `initPoint` es una página del backend que manda al comprador al botón del banco. Con Nave, es el checkout de Nave.
+- Errores nuevos: `400 invalid_provider` (medio desconocido), `409 venue_not_connected` (el boliche no tiene ese medio), `502 gateway_unavailable` (la pasarela no respondió) y `503 gateway_not_configured` (falta configuración en el servidor).
+- La vuelta y el `sync` funcionan igual para los tres medios.
+
 ### La vuelta del comprador
 
 Mercado Pago devuelve al comprador a `/<boliche>/<evento>/pedido/<uuid>` del front, con parámetros propios en la URL. No confíes en esos parámetros: el estado real lo dice el backend.

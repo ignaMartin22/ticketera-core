@@ -12,10 +12,13 @@ from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 
-from catalog import mp_connect
-from catalog.models import MercadoPagoAccount, Membership, Order, OrderItem, TicketType, Venue, VenueIntegration
+from django.conf import settings
 
-from .forms import FeeForm, MemberForm, VenueCreateForm, VenueForm
+from catalog import mp_connect
+from catalog.gateways.base import save_account
+from catalog.models import GatewayAccount, MercadoPagoAccount, Membership, Order, OrderItem, TicketType, Venue, VenueIntegration
+
+from .forms import FeeForm, GatewayForm, MemberForm, VenueCreateForm, VenueForm
 from .models import VenueStatusChange
 
 
@@ -229,12 +232,22 @@ def member_remove(request, slug, pk):
     return redirect("backoffice:venue-team", slug=slug)
 
 
-def integrations_page(request, venue, **extra):
+GATEWAYS = tuple(GatewayForm.FIELDS)
+
+
+def integrations_page(request, venue, status=200, **extra):
+    forms_by_provider = {p: GatewayForm(provider=p) for p in GATEWAYS}
+    forms_by_provider.update(extra.pop("gateway_forms", {}))
+    integrations = integrations_for(venue)
+    for integration in integrations:
+        integration.gateway_form = forms_by_provider.get(integration.provider)
     return render(request, "backoffice/venue_integrations.html", venue_context(
-        venue, "integrations", integrations=integrations_for(venue),
+        venue, "integrations", integrations=integrations,
         mp_direct=MercadoPagoAccount.objects.filter(venue=venue, direct=True).exists(),
-        mp_configured=mp_connect.is_configured(), **extra,
-    ))
+        mp_configured=mp_connect.is_configured(),
+        gateways_ready=bool(settings.PUBLIC_API_URL and settings.MP_TOKEN_ENCRYPTION_KEY),
+        macro_notify_url=f"{settings.PUBLIC_API_URL}/api/v1/pagos/macro/aviso/", **extra,
+    ), status=status)
 
 
 @platform_required
@@ -260,3 +273,41 @@ def venue_mp_disconnect(request, slug):
     mp_connect.disconnect(venue)
     messages.success(request, f"Desconectamos Mercado Pago de {venue.name}.")
     return redirect("backoffice:venue-integrations", slug=venue.slug)
+
+
+@platform_required
+@require_POST
+@never_cache
+def venue_gateway_save(request, slug, provider):
+    """Guarda (o reemplaza) las credenciales de Macro o Nave que entregó el banco."""
+    venue = get_object_or_404(Venue, slug=slug)
+    if provider not in GATEWAYS:
+        return redirect("backoffice:venue-integrations", slug=venue.slug)
+    form = GatewayForm(request.POST, provider=provider)
+    if not form.is_valid():
+        return integrations_page(request, venue, status=400, gateway_forms={provider: form})
+    live = form.cleaned_data["live_mode"]
+    with transaction.atomic():
+        save_account(venue, provider, form.credentials(), live_mode=live)
+        VenueIntegration.objects.update_or_create(venue=venue, provider=provider, defaults={
+            "status": VenueIntegration.Status.CONNECTED, "account_id": form.account_id()[:100],
+            "account_label": "Producción" if live else "Entorno de prueba", "connected_at": timezone.now(),
+            "expires_at": None, "last_error": "",
+        })
+    messages.success(request, f"Guardamos las credenciales de {VenueIntegration.Provider(provider).label}.")
+    return redirect("backoffice:venue-integrations", slug=venue.slug)
+
+
+@platform_required
+@require_POST
+def venue_gateway_disconnect(request, slug, provider):
+    venue = get_object_or_404(Venue, slug=slug)
+    if provider in GATEWAYS:
+        with transaction.atomic():
+            GatewayAccount.objects.filter(venue=venue, provider=provider).delete()
+            VenueIntegration.objects.filter(venue=venue, provider=provider).update(
+                status=VenueIntegration.Status.DISCONNECTED, account_id="", account_label="", connected_at=None,
+            )
+        messages.success(request, f"Desconectamos {VenueIntegration.Provider(provider).label} de {venue.name}.")
+    return redirect("backoffice:venue-integrations", slug=venue.slug)
+
