@@ -85,6 +85,8 @@ class VenueIntegration(models.Model):
 
     class Provider(models.TextChoices):
         MERCADOPAGO = "mercadopago", "Mercado Pago"
+        MACRO = "macro", "Macro Click de Pago"
+        NAVE = "nave", "Nave (Naranja X y Galicia)"
         WHATSAPP = "whatsapp", "WhatsApp"
         EMAIL = "email", "Email"
 
@@ -341,3 +343,60 @@ class MercadoPagoAccount(models.Model):
     )
     connected_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+
+class GatewayAccount(models.Model):
+    """Cuenta de un boliche en una pasarela de pago sin reparto (Macro Click de Pago o Nave).
+
+    Las credenciales las entrega el banco y se cargan desde el panel. Se guardan cifradas como
+    un JSON con los campos de cada pasarela (ver `catalog/gateways`).
+    """
+
+    class Provider(models.TextChoices):
+        MACRO = "macro", "Macro Click de Pago"
+        NAVE = "nave", "Nave (Naranja X y Galicia)"
+
+    venue = models.ForeignKey(Venue, on_delete=models.CASCADE, related_name="gateway_accounts")
+    provider = models.CharField(max_length=20, choices=Provider)
+    credentials = models.TextField(help_text="JSON cifrado con las credenciales de la pasarela.")
+    live_mode = models.BooleanField(default=False, help_text="Producción. Si no, usa el entorno de prueba del banco.")
+    connected_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["venue", "provider"], name="unique_venue_gateway"),
+        ]
+
+    def __str__(self):
+        return f"{self.venue} / {self.get_provider_display()}"
+
+
+class GatewayCharge(models.Model):
+    """Cobro de un pedido en una pasarela sin reparto, con lo que hicimos al confirmarlo.
+
+    Es el equivalente de `Order.mp_order_id` más `Payment` para Mercado Pago. Toda la venta entra
+    a la cuenta del boliche: la comisión de la plataforma queda en `Order.platform_fee` para
+    liquidarla por fuera.
+    """
+
+    order = models.ForeignKey(Order, on_delete=models.PROTECT, related_name="gateway_charges")
+    provider = models.CharField(max_length=20, choices=GatewayAccount.Provider)
+    reference = models.CharField(
+        max_length=64, help_text="Identificador del cobro: el que mandamos (Macro) o el que devolvió la pasarela (Nave).",
+    )
+    checkout_url = models.URLField(max_length=1000, blank=True)
+    notify_secret = models.CharField(max_length=64, blank=True, help_text="Secreto de la URL de aviso (Nave).")
+    status = models.CharField(max_length=40, blank=True)
+    amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    outcome = models.CharField(max_length=12, choices=Payment.Outcome, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+        constraints = [
+            models.UniqueConstraint(fields=["order", "provider"], name="unique_order_gateway_charge"),
+            models.UniqueConstraint(fields=["provider", "reference"], name="unique_gateway_reference"),
+        ]
+

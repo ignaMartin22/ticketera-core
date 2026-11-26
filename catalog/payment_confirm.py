@@ -99,23 +99,33 @@ def _reference(mp_order):
     return str(value)[:100] if value not in (None, "") else ""
 
 
-def _approved_outcome(order, record, amount, mp_order):
-    total = sum(
+def order_total(order):
+    """Lo que paga el comprador, con los importes guardados en el pedido."""
+    return sum(
         (item.quantity * (item.unit_price + item.unit_service_fee) for item in order.items.all()),
         Decimal(0),
     ).quantize(CENT)
-    if mp_order.get("currency") != "ARS" or amount != total:
+
+
+def approved_outcome(order, amount, currency):
+    """Qué hacer con un pago aprobado, venga de Mercado Pago o de otra pasarela.
+
+    `order` tiene que estar bloqueado (`select_for_update`) y el pago todavía no emitió
+    entradas. Si el pedido ya está pagado, lo pagó otro cobro: es un pago duplicado.
+    """
+    if currency != "ARS" or amount != order_total(order):
         return Outcome.MISMATCH
-    if (
-        order.paid_at is not None
-        and order.payments.filter(outcome=Outcome.ISSUED).exclude(mp_order_id=record.mp_order_id).exists()
-    ):
+    if order.paid_at is not None:
         return Outcome.DUPLICATE
     try:
         issue_tickets(order.pk)
     except OrderConflict:
         return Outcome.NO_CAPACITY
     return Outcome.ISSUED
+
+
+def _approved_outcome(order, record, amount, mp_order):
+    return approved_outcome(order, amount, mp_order.get("currency"))
 
 
 def sync_order(order):
@@ -212,5 +222,8 @@ def order_payment_sync(request, venue_slug, event_slug, order_id):
         pk=order_id, event__slug=event_slug, event__venue__slug=venue_slug,
     )
     sync_order(order)
+    from . import gateways  # gateways importa este módulo
+
+    gateways.sync_order(Order.objects.select_related("event__venue").get(pk=order_id))
     order = Order.objects.get(pk=order_id)
     return JsonResponse({"order": order_data(order, order.items.all())})

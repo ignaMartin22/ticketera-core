@@ -1,6 +1,7 @@
 from django.urls import path
 
 from . import payment_confirm, payments, views
+from .gateways import views as gateway_views
 
 urlpatterns = [
     path("venues/", views.venue_list, name="venue-list"),
@@ -26,4 +27,7 @@ urlpatterns = [
         payment_confirm.order_payment_sync,
         name="order-payment-sync",
     ),
+    path("pagos/macro/aviso/", gateway_views.macro_notify, name="macro-notify"),
+    path("pagos/macro/<uuid:order_id>/", gateway_views.macro_pay_page, name="macro-pay"),
+    path("pagos/nave/<uuid:order_id>/aviso/", gateway_views.nave_notify, name="nave-notify"),
 ]

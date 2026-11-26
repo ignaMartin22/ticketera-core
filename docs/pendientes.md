@@ -21,6 +21,7 @@ Qué falta para vender una fecha real de Infinity con TicketJuy. Estado al 19/11
    - Decidir quién absorbe las comisiones propias de Mercado Pago.
    - Reembolsos, y qué pasa con los pagos marcados para revisión (`no_capacity`, `mismatch`, `duplicate`).
    - Botón de pago en la página del pedido de TicketJuy.
+   - Macro Click de Pago y Nave (Naranja X y Galicia) están implementados como medios de pago sin reparto, pero sin probar contra los bancos. Faltan las credenciales de prueba y la documentación oficial. Ver [pasarelas](specs/pasarelas.md).
 2. **Página de la entrada.** La API ya devuelve las entradas del pedido con el texto del QR. La página `/entrada/[code]` de TicketJuy todavía usa datos de prueba.
 3. **Envío de entradas.** Hecho por email: al emitirse las entradas el core le manda al comprador un mail con un QR por entrada y el link a su pedido, y `send_ticket_emails` reintenta los que fallaron. Queda:
    - Comprar el dominio de la plataforma y verificarlo en Resend: sin eso solo le llega al mail de la cuenta de Resend. Ver [Mail con Resend](mail-resend.md).

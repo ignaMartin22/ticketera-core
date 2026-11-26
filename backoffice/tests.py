@@ -151,7 +151,10 @@ class BackofficeTests(TestCase):
                                         account_label="moon@mp.test")
         response = self.client.get(reverse("backoffice:venue-integrations", args=["moon"]))
         statuses = {i.provider: i.status for i in response.context["integrations"]}
-        self.assertEqual(statuses, {"mercadopago": "connected", "whatsapp": "disconnected", "email": "disconnected"})
+        self.assertEqual(statuses, {
+            "mercadopago": "connected", "macro": "disconnected", "nave": "disconnected",
+            "whatsapp": "disconnected", "email": "disconnected",
+        })
         self.assertContains(response, "moon@mp.test")
         self.assertFalse(VenueIntegration.objects.filter(venue=self.venue, provider="whatsapp").exists())
 
@@ -345,3 +348,67 @@ class PlatformMercadoPagoTests(TestCase):
         html = self.client.get(self.url("venue-integrations")).content.decode()
         self.assertEqual(html.count("Disponible cuando se habilite la integración."), 2)
         self.assertEqual(html.count('<button type="button" class="btn btn-sm" disabled>Conectar</button>'), 2)
+
+
+@override_settings(PUBLIC_API_URL="https://api.example.com")
+class PlatformGatewayTests(TestCase):
+    """Macro y Nave: el superusuario carga las credenciales que entregó el banco."""
+
+    setUpTestData = classmethod(PlatformMercadoPagoTests.setUpTestData.__func__)
+    setUp = PlatformMercadoPagoTests.setUp
+    url = PlatformMercadoPagoTests.url
+
+    def save(self, provider, data, slug="a"):
+        prefixed = {f"{provider}-{key}": value for key, value in data.items()}
+        return self.client.post(
+            reverse("backoffice:venue-gateway-save", args=[slug, provider]), prefixed,
+        )
+
+    def test_g1_saves_encrypted_credentials_and_connects(self):
+        from catalog.gateways.base import credentials
+        from catalog.models import GatewayAccount
+
+        response = self.save("macro", {"comercio": "COM-1", "secret": "frase-muy-secreta", "sucursal": ""})
+        self.assertRedirects(response, self.url("venue-integrations"))
+        account = GatewayAccount.objects.get(venue=self.a, provider="macro")
+        self.assertNotIn("frase-muy-secreta", account.credentials)
+        self.assertEqual(credentials(account)["secret"], "frase-muy-secreta")
+        self.assertFalse(account.live_mode)
+        integration = VenueIntegration.objects.get(venue=self.a, provider="macro")
+        self.assertEqual((integration.status, integration.account_id, integration.account_label),
+                         ("connected", "COM-1", "Entorno de prueba"))
+        html = self.client.get(self.url("venue-integrations")).content.decode()
+        self.assertNotIn("frase-muy-secreta", html)
+        self.assertIn("Reemplazar credenciales", html)
+        self.assertIn("https://api.example.com/api/v1/pagos/macro/aviso/", html)
+        self.assertFalse(GatewayAccount.objects.filter(venue=self.b).exists())
+
+    def test_g2_missing_fields_show_errors(self):
+        from catalog.models import GatewayAccount
+
+        response = self.save("nave", {"client_id": "cid", "pos_id": "POS"})
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, "Este campo es obligatorio", status_code=400)
+        self.assertFalse(GatewayAccount.objects.exists())
+
+    def test_g3_production_flag_and_disconnect(self):
+        from catalog.models import GatewayAccount
+
+        self.save("nave", {"client_id": "cid", "client_secret": "cs", "pos_id": "POS-9", "live_mode": "on"})
+        self.assertTrue(GatewayAccount.objects.get(venue=self.a, provider="nave").live_mode)
+        response = self.client.post(reverse("backoffice:venue-gateway-disconnect", args=["a", "nave"]))
+        self.assertRedirects(response, self.url("venue-integrations"))
+        self.assertFalse(GatewayAccount.objects.exists())
+        self.assertEqual(VenueIntegration.objects.get(venue=self.a, provider="nave").status, "disconnected")
+
+    def test_g4_only_superusers(self):
+        from catalog.models import GatewayAccount
+
+        self.client.force_login(self.staff)
+        url = reverse("backoffice:venue-gateway-save", args=["a", "macro"])
+        self.client.post(url, {"macro-comercio": "x", "macro-secret": "y"})
+        self.assertFalse(GatewayAccount.objects.exists())
+
+    def test_g5_unknown_provider_does_nothing(self):
+        response = self.client.post(reverse("backoffice:venue-gateway-save", args=["a", "whatsapp"]), {})
+        self.assertRedirects(response, self.url("venue-integrations"))

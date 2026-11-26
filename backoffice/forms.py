@@ -135,3 +135,43 @@ class MemberForm(forms.Form):
         )
         return membership, created
 
+
+class GatewayForm(forms.Form):
+    """Credenciales de una pasarela sin reparto, tal como las entrega el banco.
+
+    Las claves secretas nunca se vuelven a mostrar: para cambiarlas hay que cargarlas de nuevo.
+    """
+
+    FIELDS = {
+        "macro": [
+            ("comercio", "ID de comercio", False, True),
+            ("secret", "Clave secreta (frase)", True, True),
+            ("sucursal", "ID de sucursal", False, False),
+        ],
+        "nave": [
+            ("client_id", "Client ID", False, True),
+            ("client_secret", "Client secret", True, True),
+            ("pos_id", "POS ID", False, True),
+        ],
+    }
+
+    live_mode = forms.BooleanField(
+        label="Credenciales de producción", required=False,
+        help_text="Sin marcar, se usa el entorno de prueba del banco: no se cobra de verdad.",
+    )
+
+    def __init__(self, *args, provider, **kwargs):
+        super().__init__(*args, prefix=provider, **kwargs)
+        self.provider = provider
+        for name, label, secret, required in self.FIELDS[provider]:
+            attrs = {"autocomplete": "off", "spellcheck": "false"}
+            widget = forms.PasswordInput(attrs=attrs, render_value=False) if secret else forms.TextInput(attrs=attrs)
+            self.fields[name] = forms.CharField(label=label, max_length=200, required=required, strip=True, widget=widget)
+        self.order_fields([name for name, *_ in self.FIELDS[provider]] + ["live_mode"])
+
+    def credentials(self):
+        return {name: self.cleaned_data[name] for name, *_ in self.FIELDS[self.provider]}
+
+    def account_id(self):
+        return self.cleaned_data["comercio" if self.provider == "macro" else "pos_id"]
+

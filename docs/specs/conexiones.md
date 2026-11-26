@@ -7,6 +7,8 @@ Cada boliche conecta sus propias cuentas de servicios externos. El core guarda e
 | `provider` | Para qué |
 | --- | --- |
 | `mercadopago` | Cobrar las entradas en la cuenta del boliche y retener la comisión de la plataforma |
+| `macro` | Cobrar con Macro Click de Pago, sin reparto. Ver [pasarelas](pasarelas.md) |
+| `nave` | Cobrar con Nave (Naranja X y Galicia), sin reparto. Ver [pasarelas](pasarelas.md) |
 | `whatsapp` | Mandar las entradas y los avisos. Requiere la aprobación de Meta para WhatsApp Business |
 | `email` | Mandar las entradas por email con el nombre del boliche |
 
