@@ -1,6 +1,6 @@
-# Mail de entradas con Resend
+# Mail de entradas
 
-Cuando se emiten las entradas de un pedido (pago confirmado, pedido gratis o "Marcar como pagado" en el admin), el core le manda al comprador un mail con un QR por entrada y el link a su pedido. El envío usa SMTP, así que sirve cualquier proveedor. Esta guía usa [Resend](https://resend.com).
+Cuando se emiten las entradas de un pedido (pago confirmado, pedido gratis o "Marcar como pagado" en el admin), el core le manda al comprador un mail con un QR por entrada y el link a su pedido. El envío usa SMTP, así que sirve cualquier proveedor. Esta guía usa [Resend](https://resend.com) como principal y, opcional, [Brevo](https://www.brevo.com) como respaldo (ver [Respaldo con Brevo](#respaldo-con-brevo)).
 
 ## Cómo se comporta
 
@@ -57,8 +57,35 @@ Un dominio de Railway (`*.up.railway.app`) o de sslip.io no sirve: hay que poder
 
 Con el dominio también se pueden mover el front (`entradas.<dominio>` en Railway) y la API (`api.<dominio>` en la VPS).
 
+## Respaldo con Brevo
+
+El plan free de Resend corta en 100 mails por día (UTC, se renueva a las 21:00 de Argentina) y **rechaza** lo que pasa del cupo. Con un respaldo configurado, el mail que Resend rechaza sale en el momento por Brevo (free: 300 por día). Si fallan los dos, el pedido queda pendiente como siempre y lo toma `send_ticket_emails`.
+
+Va en ese orden a propósito: Brevo, al pasar su cupo, encola en vez de rechazar, así que de principal nunca dispararía el respaldo.
+
+Requisito: el dominio ya verificado en Resend ([Etapa 2](#etapa-2-dominio-propio)), para usar el mismo remitente en los dos.
+
+1. **Verificar el dominio en Brevo.** **Senders, Domains & Dedicated IPs → Domains → Add a domain** con el mismo subdominio de mails (`mail.<dominio>`). Cargar en el DNS los registros que muestra el panel (código de verificación, DKIM y DMARC). Conviven con los de Resend: el DKIM de cada uno va en su propio nombre. Si el panel pide SPF y ya hay un TXT SPF en ese nombre, unir los `include:` en un solo registro (un nombre no puede tener dos SPF). Esperar a que figure **Authenticated**.
+2. **Crear la clave SMTP.** **SMTP & API → SMTP → Generate a new SMTP key**. El panel muestra también el **login** SMTP (del estilo `xxxx@smtp-brevo.com`): ese es el usuario, no el mail de la cuenta.
+3. En `deploy/.env` de la VPS, sin tocar las variables de Resend:
+
+   ```
+   DJANGO_EMAIL_FALLBACK_HOST=smtp-relay.brevo.com
+   DJANGO_EMAIL_FALLBACK_PORT=587
+   DJANGO_EMAIL_FALLBACK_HOST_USER=<login SMTP de Brevo>
+   DJANGO_EMAIL_FALLBACK_HOST_PASSWORD=<clave SMTP>
+   DJANGO_EMAIL_FALLBACK_USE_TLS=1
+   ```
+
+   Con `DJANGO_EMAIL_HOST` y `DJANGO_EMAIL_FALLBACK_HOST` cargados, el core usa solo el backend con respaldo (`ticketera.mail.FailoverBackend`). Vaciar `DJANGO_EMAIL_FALLBACK_HOST` lo apaga.
+4. Recrear `web`.
+5. **Probar el respaldo:** cambiar a propósito `DJANGO_EMAIL_HOST_PASSWORD` por una clave inválida, recrear `web` y mandar `sendtestemail` o hacer una compra de prueba. Tiene que llegar igual, y en el log tiene que aparecer el aviso del respaldo. Revisar en ese mail si Brevo agrega su sello ("Sent with Brevo"). Después, volver a poner la clave buena y recrear `web`.
+
+Para ver cuántos mails salieron por el respaldo: `docker compose -f deploy/docker-compose.yml logs web | grep "mando por el respaldo"`.
+
 ## Si no llega
 
 - **Resend → Emails**: muestra si se entregó, rebotó o fue a spam.
-- `docker compose -f deploy/docker-compose.yml logs web | grep "mail de entradas"`: el error del envío.
+- `docker compose -f deploy/docker-compose.yml logs web | grep "mail de entradas"`: el error del envío. Con respaldo, `grep "respaldo"` muestra por qué falló el principal.
+- **Brevo → Transactional → Logs**: lo mismo para los mails que salieron por el respaldo.
 - Error de autenticación: la API key. "Not authorized to send" o similar: el dominio no está verificado o el remitente no es de ese dominio.

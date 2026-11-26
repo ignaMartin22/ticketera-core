@@ -125,17 +125,24 @@ FRONT_BASE_URL = os.environ.get("FRONT_BASE_URL", "").rstrip("/")
 # Mail de entradas al comprador. Sin DJANGO_EMAIL_HOST, en desarrollo los mails se imprimen en la
 # consola; en el servidor no salen y quedan pendientes para `manage.py send_ticket_emails`.
 EMAIL_HOST = os.environ.get("DJANGO_EMAIL_HOST", "")
-EMAIL_BACKEND = os.environ.get(
-    "DJANGO_EMAIL_BACKEND",
-    "django.core.mail.backends.smtp.EmailBackend"
-    if EMAIL_HOST or not DEBUG
-    else "django.core.mail.backends.console.EmailBackend",
-)
 EMAIL_PORT = int(os.environ.get("DJANGO_EMAIL_PORT", "587"))
 EMAIL_HOST_USER = os.environ.get("DJANGO_EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.environ.get("DJANGO_EMAIL_HOST_PASSWORD", "")
 EMAIL_USE_TLS = os.environ.get("DJANGO_EMAIL_USE_TLS", "1") == "1"
 EMAIL_TIMEOUT = 10
+# SMTP de respaldo (opcional): si el principal falla, el mail sale en el momento por este.
+EMAIL_FALLBACK_HOST = os.environ.get("DJANGO_EMAIL_FALLBACK_HOST", "")
+EMAIL_FALLBACK_PORT = int(os.environ.get("DJANGO_EMAIL_FALLBACK_PORT", "587"))
+EMAIL_FALLBACK_HOST_USER = os.environ.get("DJANGO_EMAIL_FALLBACK_HOST_USER", "")
+EMAIL_FALLBACK_HOST_PASSWORD = os.environ.get("DJANGO_EMAIL_FALLBACK_HOST_PASSWORD", "")
+EMAIL_FALLBACK_USE_TLS = os.environ.get("DJANGO_EMAIL_FALLBACK_USE_TLS", "1") == "1"
+if EMAIL_HOST and EMAIL_FALLBACK_HOST:
+    _default_email_backend = "ticketera.mail.FailoverBackend"
+elif EMAIL_HOST or not DEBUG:
+    _default_email_backend = "django.core.mail.backends.smtp.EmailBackend"
+else:
+    _default_email_backend = "django.core.mail.backends.console.EmailBackend"
+EMAIL_BACKEND = os.environ.get("DJANGO_EMAIL_BACKEND", _default_email_backend)
 DEFAULT_FROM_EMAIL = os.environ.get("DJANGO_DEFAULT_FROM_EMAIL", "TicketJuy <entradas@localhost>")
 # A dónde llegan las respuestas de los compradores al mail de entradas (vacío: al remitente).
 TICKETS_REPLY_TO = os.environ.get("DJANGO_TICKETS_REPLY_TO", "")
