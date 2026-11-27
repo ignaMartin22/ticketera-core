@@ -1,12 +1,21 @@
+import logging
+
 from django import forms
 from django.contrib import admin, messages
+from django.contrib.admin import helpers
 from django.db.models import Sum
+from django.template.response import TemplateResponse
 from django.utils import timezone
 
-from .models import ApiToken, Event, Membership, Order, Payment, Ticket, TicketType, Venue
+from .models import ApiToken, Event, Membership, Order, Payment, Ticket, TicketType, Venue, VoidReason
 from .orders import OrderConflict
 from .ticket_email import send_ticket_email
 from .tickets import issue_tickets
+from .voiding import void_tickets
+from .web_login import LimitedAdminAuthenticationForm
+
+logger = logging.getLogger(__name__)
+admin.site.login_form = LimitedAdminAuthenticationForm  # tope de intentos del login del admin
 
 
 @admin.register(Venue)
@@ -141,7 +150,7 @@ class TicketTypeAdmin(VenueCatalogAdmin):
 class OrderAdmin(admin.ModelAdmin):
     list_display = ["event", "buyer_name", "buyer_email", "buyer_phone", "status", "tickets_emailed_at", "created_at"]
     list_select_related = ["event", "event__venue"]
-    actions = ["mark_paid_and_issue", "resend_ticket_email"]
+    actions = ["mark_paid_and_issue", "resend_ticket_email", "void_order_tickets"]
 
     def has_module_permission(self, request):
         return managed_venues(request.user).exists()
@@ -193,6 +202,29 @@ class OrderAdmin(admin.ModelAdmin):
                 issued += 1
         if issued:
             self.message_user(request, f"Entradas emitidas en {issued} pedido(s).", level=messages.SUCCESS)
+
+    @admin.action(description="Anular entradas", permissions=["change"])
+    def void_order_tickets(self, request, queryset):
+        """Anula todas las entradas de los pedidos pagados elegidos (motivo "a mano"), con confirmación."""
+        orders = queryset.filter(paid_at__isnull=False)
+        tickets = Ticket.objects.filter(order__in=orders, voided_at__isnull=True)
+        if request.POST.get("post") != "yes":
+            context = {
+                **self.admin_site.each_context(request),
+                "title": "Anular entradas",
+                "opts": self.model._meta,
+                "orders": orders.select_related("event"),
+                "ticket_count": tickets.count(),
+                "used_count": tickets.filter(used_at__isnull=False).count(),
+                "action_checkbox_name": helpers.ACTION_CHECKBOX_NAME,
+            }
+            return TemplateResponse(request, "admin/catalog/order/void_confirmation.html", context)
+        result = void_tickets(tickets, VoidReason.MANUAL, by=request.user)
+        logger.warning(
+            "Anulación manual por %s: %s entrada(s) en %s pedido(s) (%s ya habían ingresado).",
+            request.user.get_username(), result.voided, orders.count(), result.used,
+        )
+        self.message_user(request, f"Entradas anuladas: {result.voided}.", level=messages.SUCCESS)
 
     @admin.action(description="Reenviar las entradas por email", permissions=["view"])
     def resend_ticket_email(self, request, queryset):
@@ -266,9 +298,9 @@ class AttendedFilter(admin.SimpleListFilter):
 
 @admin.register(Ticket)
 class TicketAdmin(admin.ModelAdmin):
-    list_display = ["event", "holder", "ticket_type", "attended", "used_at", "used_by"]
+    list_display = ["event", "holder", "ticket_type", "attended", "used_at", "used_by", "voided_at", "void_reason"]
     list_select_related = ["event", "order", "ticket_type", "used_by"]
-    list_filter = ["event", AttendedFilter]
+    list_filter = ["event", AttendedFilter, "void_reason"]
     actions = None
 
     def has_module_permission(self, request):

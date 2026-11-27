@@ -16,6 +16,7 @@ from django.conf import settings
 
 from catalog import mp_connect
 from catalog.gateways.base import save_account
+from catalog.web_login import LimitedAuthenticationForm
 from catalog.models import GatewayAccount, MercadoPagoAccount, Membership, Order, OrderItem, TicketType, Venue, VenueIntegration
 
 from .forms import FeeForm, GatewayForm, MemberForm, VenueCreateForm, VenueForm
@@ -37,6 +38,7 @@ def platform_required(view):
 
 class LoginView(auth_views.LoginView):
     template_name = "backoffice/login.html"
+    authentication_form = LimitedAuthenticationForm
     redirect_authenticated_user = True
 
 

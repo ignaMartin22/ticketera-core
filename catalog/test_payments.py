@@ -90,7 +90,7 @@ class PaymentLinkTests(TestCase):
         total = sum(Decimal(str(i["quantity"])) * Decimal(i["unit_price"]) for i in body["items"])
         self.assertEqual(total, Decimal(2 * 11000 + 19800))
         self.assertEqual(Decimal(body["total_amount"]), total)
-        self.assertEqual(body["external_reference"], str(order.pk))
+        self.assertEqual(body["external_reference"], order.payment_ref)
         self.assertEqual(body["payer"], {"email": "comprador@example.com"})
 
     def test_03_body_has_no_buyer_name_or_phone(self):

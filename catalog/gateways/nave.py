@@ -86,7 +86,7 @@ def create(account, order, items, total, return_url, notify_url, seconds_left):
     """Crea la intención de pago. Devuelve (id, checkout_url)."""
     event = order.event
     body = {
-        "external_payment_id": str(order.pk),
+        "external_payment_id": order.payment_ref,
         "seller": {"pos_id": credentials(account)["pos_id"]},
         "transactions": [{
             "amount": {"currency": "ARS", "value": format(money(total), ".2f")},
@@ -101,7 +101,7 @@ def create(account, order, items, total, return_url, notify_url, seconds_left):
             ],
         }],
         "buyer": {
-            "user_id": f"guest_{order.pk}",
+            "user_id": f"guest_{order.payment_ref}",
             "name": order.buyer_name,
             "user_email": order.buyer_email,
             "phone": order.buyer_phone,
@@ -122,7 +122,8 @@ def create(account, order, items, total, return_url, notify_url, seconds_left):
 def fetch(account, charge):
     """Consulta la intención de pago. Devuelve (estado, aprobado, monto), o None si no es de este pedido."""
     data = _request(account, "GET", f"/payment_requests/{charge.reference}")
-    if str(data.get("external_payment_id")) != str(charge.order_id):
+    # Los cobros iniciados antes de `payment_ref` mandaron el UUID del pedido como referencia.
+    if str(data.get("external_payment_id")) not in (charge.order.payment_ref, str(charge.order_id)):
         return None
     status = data.get("status")
     name = status.get("name") if isinstance(status, dict) else status

@@ -1,4 +1,5 @@
 import hashlib
+import time
 import hmac
 import io
 import json
@@ -22,6 +23,7 @@ from .test_payments import MP_ORDER_ID, make_order, make_venue
 from .views import order_data
 
 SECRET = "secreto-del-webhook"
+TS = str(int(time.time()))
 WEBHOOK = "/api/v1/mercadopago/webhook/"
 USER_A, USER_B = 1001, 2002
 NO_CAPACITY, ISSUED = Payment.Outcome.NO_CAPACITY, Payment.Outcome.ISSUED
@@ -42,7 +44,7 @@ def mp_order(order, user_id=USER_A, order_id=MP_ORDER_ID, status="processed", am
     amount = f"{(total_of(order) if amount is None else amount):.2f}"
     return {
         "id": order_id, "status": status, "status_detail": "accredited",
-        "external_reference": str(order.pk), "total_amount": amount, "total_paid_amount": amount,
+        "external_reference": order.payment_ref, "total_amount": amount, "total_paid_amount": amount,
         "currency": "ARS", "user_id": str(user_id),
         "transactions": {"payments": [{
             "id": "PAY01", "amount": amount, "paid_amount": amount, "status": status,
@@ -238,7 +240,8 @@ class WebhookTests(Base):
         mock.patch("catalog.mp_connect.get_access_token", side_effect=token_for).start()
         self.addCleanup(mock.patch.stopall)
 
-    def sign(self, data_id, request_id="req-1", ts="1700000000", secret=SECRET):
+    def sign(self, data_id, request_id="req-1", ts=None, secret=SECRET):
+        ts = ts or TS
         data_id = str(data_id).lower()  # Mercado Pago firma los ids alfanuméricos en minúsculas
         manifest = f"id:{data_id};request-id:{request_id};ts:{ts};"
         digest = hmac.new(secret.encode(), manifest.encode(), hashlib.sha256).hexdigest()
@@ -362,9 +365,9 @@ class WebhookTests(Base):
         self.assertEqual(Payment.objects.get().mp_order_id, MP_ORDER_ID)
         self.get.reset_mock()
         # firmado con el id en mayúsculas: no es la firma de Mercado Pago
-        manifest = f"id:{MP_ORDER_ID};request-id:req-1;ts:1700000000;"
+        manifest = f"id:{MP_ORDER_ID};request-id:req-1;ts:{TS};"
         digest = hmac.new(SECRET.encode(), manifest.encode(), hashlib.sha256).hexdigest()
-        bad = {"HTTP_X_SIGNATURE": f"ts=1700000000,v1={digest}", "HTTP_X_REQUEST_ID": "req-1"}
+        bad = {"HTTP_X_SIGNATURE": f"ts={TS},v1={digest}", "HTTP_X_REQUEST_ID": "req-1"}
         self.assertEqual(self.notify(order_id=MP_ORDER_ID, headers=bad).status_code, 401)
         self.get.assert_not_called()
 

@@ -1,5 +1,7 @@
 """Única puerta de salida hacia Mercado Pago (SDK oficial). Sin lógica de negocio."""
 
+import time
+
 import requests
 from django.conf import settings
 from mercadopago import SDK
@@ -90,13 +92,32 @@ def get_user(access_token):
     return _call(lambda _: user.get(), None)
 
 
-def webhook_signature_is_valid(x_signature, x_request_id, data_id):
-    """Valida la firma del aviso con la clave de la aplicación. Nunca levanta."""
+def _signature_age_ok(x_signature, now_ms):
+    """El `ts` de x-signature no se aleja más de la tolerancia del reloj (pasado ni futuro).
+
+    El SDK asume segundos y la documentación de Mercado Pago muestra milisegundos: se aceptan
+    los dos (un valor de 12 dígitos o más es milisegundos), así el chequeo no depende de eso.
+    """
+    ts = None
+    for part in str(x_signature).split(","):
+        key, _, value = part.partition("=")
+        if key.strip().lower() == "ts":
+            ts = value.strip()
+    if not ts or not ts.isdigit():
+        return False
+    ts_ms = int(ts) if len(ts) >= 12 else int(ts) * 1000
+    return abs(now_ms - ts_ms) <= settings.MP_WEBHOOK_MAX_AGE_SECONDS * 1000
+
+
+def webhook_signature_is_valid(x_signature, x_request_id, data_id, now_ms=None):
+    """Valida la firma del aviso con la clave de la aplicación y que no sea vieja. Nunca levanta."""
     secret = settings.MP_WEBHOOK_SECRET
     if not secret or not x_signature:
         return False
     try:
         WebhookSignatureValidator.validate(x_signature, x_request_id, data_id, secret)
+        if now_ms is None:
+            now_ms = int(time.time() * 1000)
+        return _signature_age_ok(x_signature, now_ms)
     except (InvalidWebhookSignatureError, ValueError, TypeError, AttributeError):
         return False
-    return True

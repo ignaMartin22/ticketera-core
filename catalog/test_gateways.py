@@ -49,9 +49,9 @@ class MacroTests(GatewayCase):
         order = make_order(self.event)
         response = pay(self.client, order, "macro")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"initPoint": f"{API}/api/v1/pagos/macro/{order.pk}/", "provider": "macro"})
+        self.assertEqual(response.json(), {"initPoint": f"{API}/api/v1/pagos/macro/{order.payment_ref}/", "provider": "macro"})
         charge = GatewayCharge.objects.get(order=order)
-        self.assertEqual(charge.reference, order.pk.hex)
+        self.assertEqual(charge.reference, order.payment_ref)
         order.refresh_from_db()
         # Cargo de servicio (10 %) más comisión (5 %) sobre 2 × 10.000 + 18.000.
         self.assertEqual(order.platform_fee, Decimal("5700.00"))
@@ -70,7 +70,7 @@ class MacroTests(GatewayCase):
     def test_05_page_posts_the_encrypted_form(self):
         order = make_order(self.event)
         pay(self.client, order, "macro")
-        response = self.client.get(f"/api/v1/pagos/macro/{order.pk}/", REMOTE_ADDR="190.1.2.3")
+        response = self.client.get(f"/api/v1/pagos/macro/{order.payment_ref}/", REMOTE_ADDR="190.1.2.3")
         self.assertEqual(response.status_code, 200)
         fields = response.context["fields"]
         self.assertEqual(response.context["action"], "https://sandboxpp.asjservicios.com.ar/")
@@ -81,7 +81,7 @@ class MacroTests(GatewayCase):
         )
         self.assertEqual(macro.decrypt(fields["CallbackSuccess"], MACRO["secret"]),
                          f"{FRONT}/a/fecha/pedido/{order.pk}")
-        self.assertEqual(fields["TransaccionComercioId"], order.pk.hex)
+        self.assertEqual(fields["TransaccionComercioId"], order.payment_ref)
         self.assertNotContains(response, MACRO["secret"])
         self.assertEqual(response["X-Robots-Tag"], "noindex")
 
@@ -100,7 +100,7 @@ class MacroTests(GatewayCase):
         post = mock.patch("catalog.gateways.macro.requests.post", return_value=session).start()
         get = mock.patch("catalog.gateways.macro.requests.get", return_value=listed).start()
         response = self.client.post(
-            "/api/v1/pagos/macro/aviso/", data=json.dumps({"TransaccionComercioId": order.pk.hex, "EstadoId": 3}),
+            "/api/v1/pagos/macro/aviso/", data=json.dumps({"TransaccionComercioId": order.payment_ref, "EstadoId": 3}),
             content_type="application/json",
         )
         return response, post, get
@@ -108,7 +108,7 @@ class MacroTests(GatewayCase):
     def test_08_notice_is_verified_with_the_api_and_issues_tickets(self):
         order = make_order(self.event)
         pay(self.client, order, "macro")
-        row = {"transaccionComercioId": order.pk.hex, "estado": 3, "montoBruto": 41800.0, "monto": 40000.0}
+        row = {"transaccionComercioId": order.payment_ref, "estado": 3, "montoBruto": 41800.0, "monto": 40000.0}
         response, post, get = self.notice_and_query(order, [row])
         self.assertEqual(response.status_code, 200)
         self.assertEqual(post.call_args.kwargs["json"], {"guid": "COM-123", "frase": MACRO["secret"]})
@@ -128,7 +128,7 @@ class MacroTests(GatewayCase):
     def test_10_wrong_amount_goes_to_review(self):
         order = make_order(self.event)
         pay(self.client, order, "macro")
-        self.notice_and_query(order, [{"transaccionComercioId": order.pk.hex, "estado": 3, "montoBruto": 1.0}])
+        self.notice_and_query(order, [{"transaccionComercioId": order.payment_ref, "estado": 3, "montoBruto": 1.0}])
         order.refresh_from_db()
         self.assertIsNone(order.paid_at)
         self.assertEqual(GatewayCharge.objects.get(order=order).outcome, Outcome.MISMATCH)
@@ -147,7 +147,7 @@ class MacroTests(GatewayCase):
         pay(self.client, order, "macro")
         mock.patch("catalog.gateways.macro.requests.post", side_effect=macro.requests.ConnectionError).start()
         response = self.client.post(
-            "/api/v1/pagos/macro/aviso/", data=json.dumps({"TransaccionComercioId": order.pk.hex}),
+            "/api/v1/pagos/macro/aviso/", data=json.dumps({"TransaccionComercioId": order.payment_ref}),
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 500)
@@ -173,7 +173,7 @@ class NaveTests(GatewayCase):
             body = {"id": "PR-1", "checkout_url": NAVE_CHECKOUT}
         else:
             body = {
-                "id": "PR-1", "external_payment_id": str(self.order.pk), "status": {"name": self.status},
+                "id": "PR-1", "external_payment_id": self.order.payment_ref, "status": {"name": self.status},
                 "transactions": [{"amount": {"currency": "ARS", "value": self.value}}],
             }
         return mock.Mock(status_code=200, json=mock.Mock(return_value=body))
@@ -190,12 +190,12 @@ class NaveTests(GatewayCase):
         method, called, body, headers = self.calls[1]
         self.assertTrue(called.endswith("/payment_request/ecommerce"))
         self.assertEqual(headers["Authorization"], "Bearer tok-nave")
-        self.assertEqual(body["external_payment_id"], str(self.order.pk))
+        self.assertEqual(body["external_payment_id"], self.order.payment_ref)
         self.assertEqual(body["seller"], {"pos_id": "POS-9"})
         self.assertEqual(body["transactions"][0]["amount"], {"currency": "ARS", "value": "41800.00"})
         charge = GatewayCharge.objects.get(order=self.order)
         self.assertEqual(charge.reference, "PR-1")
-        self.assertIn(f"/api/v1/pagos/nave/{self.order.pk}/aviso/?secret={charge.notify_secret}",
+        self.assertIn(f"/api/v1/pagos/nave/{self.order.payment_ref}/aviso/?secret={charge.notify_secret}",
                       body["additional_info"]["notification_url"])
 
     def test_14_rejects_a_checkout_outside_nave(self):
@@ -207,7 +207,7 @@ class NaveTests(GatewayCase):
         self.assertFalse(GatewayCharge.objects.exists())
 
     def notify(self, secret):
-        return self.client.post(f"/api/v1/pagos/nave/{self.order.pk}/aviso/?secret={secret}",
+        return self.client.post(f"/api/v1/pagos/nave/{self.order.payment_ref}/aviso/?secret={secret}",
                                 data=json.dumps({"payment_request_id": "PR-1"}), content_type="application/json")
 
     def test_15_notice_with_the_secret_is_verified_and_issues_tickets(self):

@@ -64,6 +64,14 @@ openssl rand -hex 24                                              # POSTGRES_PAS
 docker run --rm python:3.13-slim sh -c "pip install -q cryptography && python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'"   # MP_TOKEN_ENCRYPTION_KEY
 ```
 
+Opcional, recomendado: una clave propia para firmar los QR de las entradas, en vez de derivarlos de `DJANGO_SECRET_KEY`:
+
+```bash
+python3 -c "import secrets; print(secrets.token_urlsafe(50))"   # TICKET_QR_KEY
+```
+
+Con `TICKET_QR_KEY` los QR nuevos se firman con ella. Ojo: el QR no se guarda, se firma cada vez que se muestra el pedido; el mail ya enviado trae el QR viejo. Mientras `TICKET_QR_ACCEPT_LEGACY` esté en `1` (el valor por defecto) la puerta acepta las dos firmas y no se invalida ninguna entrada ya emitida. Cuando pasó la última fecha con entradas vendidas antes del cambio, `TICKET_QR_ACCEPT_LEGACY=0` deja de aceptar la firma vieja (los QR viejos pasan a `invalid`; los compradores ven el QR nuevo en su pedido). **No pongas `TICKET_QR_ACCEPT_LEGACY=0` con fechas en venta o por venir sin avisar a quienes tienen el mail viejo.** Cambiar `TICKET_QR_KEY` una vez en uso invalida los QR firmados con la anterior (guardala con el resto de los secretos).
+
 Completar también `MP_APP_ID`, `MP_CLIENT_SECRET` (de la app de Mercado Pago) y `FRONT_BASE_URL`. Dejar `DJANGO_DEBUG=0`.
 
 `FRONT_BASE_URL` es a donde Mercado Pago devuelve al comprador después de pagar (`<FRONT_BASE_URL>/<boliche>/<evento>/pedido/<id>`). En el entorno de pruebas es el front de Railway: `https://ticketjuy-production.up.railway.app`. Con `http://localhost:3000` el pago se confirma igual, pero el comprador vuelve a su propia máquina y ve un 404. Después de cambiarla, recrear el contenedor `web` para que la tome (`docker compose -f deploy/docker-compose.yml up -d web`).

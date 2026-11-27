@@ -22,14 +22,18 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
 from . import mp, mp_connect
-from .models import MercadoPagoAccount, Order, Payment
+from .models import MercadoPagoAccount, Order, Payment, VoidReason
 from .orders import OrderConflict
 from .tickets import issue_tickets
+from .voiding import void_tickets
 from .views import order_data
 
 CENT = Decimal("0.01")
 MAX_BODY = 64 * 1024
 Outcome = Payment.Outcome
+# Estados de una order de Mercado Pago que revierten un pago ya emitido. Una devolución parcial
+# (`status_detail` "partially_refunded", status "processed") NO anula: no se sabe qué entradas cubre.
+MP_REVERSALS = {"refunded": VoidReason.REFUND, "charged_back": VoidReason.CHARGEBACK}
 logger = logging.getLogger(__name__)
 
 
@@ -51,6 +55,20 @@ def _int(value):
         return None
 
 
+def order_ref_filter(reference, prefix=""):
+    """Filtro para hallar el pedido de una referencia de pasarela: `payment_ref`, o el UUID del
+    pedido (cobros iniciados antes de que existiera `payment_ref`; llevan guiones, 36 caracteres).
+    `prefix` ("order__") es para filtrar desde un modelo que apunta al pedido."""
+    reference = str(reference or "")
+    condition = Q(**{f"{prefix}payment_ref": reference})
+    if len(reference) == 36:
+        try:
+            condition |= Q(**{f"{prefix}pk": UUID(reference)})
+        except ValueError:
+            pass
+    return condition
+
+
 def process_order(account, mp_order):
     """Registra una order de Mercado Pago y, si corresponde, emite las entradas del pedido.
 
@@ -61,14 +79,13 @@ def process_order(account, mp_order):
     mp_order_id = str(mp_order.get("id") or "")[:64]
     if not mp_order_id or str(mp_order.get("user_id")) != str(account.mp_user_id):
         return None
-    try:
-        order_id = UUID(str(mp_order.get("external_reference")))
-    except ValueError:
+    reference = str(mp_order.get("external_reference") or "")[:64]
+    if not reference:
         return None
     with transaction.atomic():
         order = (
             Order.objects.select_for_update(of=("self",))
-            .filter(pk=order_id, event__venue_id=account.venue_id)
+            .filter(order_ref_filter(reference), event__venue_id=account.venue_id)
             .first()
         )
         if order is None:
@@ -93,8 +110,26 @@ def process_order(account, mp_order):
                 record.outcome = Outcome.NOT_APPROVED
         elif record.outcome != Outcome.ISSUED:
             record.outcome = _approved_outcome(order, record, amount, mp_order)
+        reason = MP_REVERSALS.get(record.status)
+        if record.outcome == Outcome.ISSUED and reason is not None:
+            void_reversed(order, reason, f"order de Mercado Pago {mp_order_id}")
         record.save()
         return record
+
+
+def void_reversed(order, reason, source):
+    """Anula las entradas de un pedido cuyo pago emitido fue devuelto o contracargado.
+
+    `order` bloqueado. No toca `sold`: anular no libera cupo. Es idempotente: el aviso se repite.
+    """
+    result = void_tickets(order.tickets.all(), reason)
+    if result.voided:
+        logger.warning(
+            "Pago revertido (%s, %s): %s entrada(s) anulada(s) del pedido %s (%s ya habían ingresado).",
+            reason, source, result.voided, order.pk, result.used,
+        )
+    return result
+
 
 
 def _reference(mp_order):

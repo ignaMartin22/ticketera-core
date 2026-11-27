@@ -116,25 +116,32 @@ def _recent(filters, limit, now):
     )
 
 
-def login_retry_after(key, ip=""):
+def login_retry_after(key, ip="", scope=DoorLoginFailure.Scope.DOOR, max_user=LOGIN_MAX_FAILURES,
+                      max_ip=LOGIN_MAX_FAILURES_PER_IP):
     """Segundos de espera si se agotaron los intentos; 0 si puede intentar.
 
-    Sin IP confiable, el límite es por usuario (10 fallos en 15 minutos). Con IP, es por
-    (usuario, IP) con el mismo umbral, más un tope por IP de 30 fallos con cualquier usuario:
-    los fallos de otras IPs no bloquean al usuario.
+    Sin IP confiable, el límite es por usuario (`max_user` fallos en 15 minutos). Con IP, es por
+    (usuario, IP) con el mismo umbral, más un tope por IP de `max_ip` fallos con cualquier usuario:
+    los fallos de otras IPs no bloquean al usuario. Cada `scope` (portería, admin) cuenta aparte.
     """
     now = timezone.now()
     if not ip:
-        return _wait(_recent({"username": key}, LOGIN_MAX_FAILURES, now), LOGIN_MAX_FAILURES, now)
+        return _wait(_recent({"username": key, "scope": scope}, max_user, now), max_user, now)
     return max(
-        _wait(_recent({"username": key, "ip": ip}, LOGIN_MAX_FAILURES, now), LOGIN_MAX_FAILURES, now),
-        _wait(_recent({"ip": ip}, LOGIN_MAX_FAILURES_PER_IP, now), LOGIN_MAX_FAILURES_PER_IP, now),
+        _wait(_recent({"username": key, "ip": ip, "scope": scope}, max_user, now), max_user, now),
+        _wait(_recent({"ip": ip, "scope": scope}, max_ip, now), max_ip, now),
     )
 
 
-def record_login_failure(key, ip=""):
-    DoorLoginFailure.objects.create(username=key, ip=ip or None)
+def record_login_failure(key, ip="", scope=DoorLoginFailure.Scope.DOOR):
+    DoorLoginFailure.objects.create(username=key, ip=ip or None, scope=scope)
     DoorLoginFailure.objects.filter(created_at__lt=timezone.now() - LOGIN_FAILURE_RETENTION).delete()
+
+
+def clear_login_failures(key, ip="", scope=DoorLoginFailure.Scope.DOOR):
+    """Un login correcto limpia los fallos del usuario (en esa IP, si hay IP confiable)."""
+    cleared = DoorLoginFailure.objects.filter(username=key, scope=scope)
+    (cleared.filter(ip=ip) if ip else cleared).delete()
 
 
 def login_user(request):
@@ -162,8 +169,7 @@ def login_user(request):
         if key is not None:
             record_login_failure(key, ip)
         return None, error("invalid_credentials", 401)
-    cleared = DoorLoginFailure.objects.filter(username=key)
-    (cleared.filter(ip=ip) if ip else cleared).delete()
+    clear_login_failures(key, ip)
     return user, None
 
 
