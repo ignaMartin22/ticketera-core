@@ -241,7 +241,7 @@ class LimitsTests(TestCase):
         self.assertEqual(self.order(idem=key).status_code, 200)  # con el tope ya lleno
         self.assertEqual(Order.objects.count(), 2)
 
-    @override_settings(FRONT_API_KEY=KEY)
+    @override_settings(FRONT_API_KEY=KEY, MAX_PENDING_ORDERS_PER_IP=5)
     def test_pending_per_ip_only_with_trusted_ip(self):
         for n in range(5):
             self.assertEqual(order_with_key(self.client, uuid4(), f"u{n}@example.com", "203.0.113.9").status_code, 201)
@@ -286,7 +286,7 @@ class LimitsTests(TestCase):
         issue_tickets(order.pk)
         self.assertEqual(self.order(ticket_type="gratis", quantity=4).status_code, 201)
 
-    @override_settings(FRONT_API_KEY=KEY)
+    @override_settings(FRONT_API_KEY=KEY, MAX_FREE_TICKETS_PER_IP=8)
     def test_free_limit_per_ip(self):
         for n in range(2):
             response = order_with_key(

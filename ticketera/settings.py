@@ -181,9 +181,9 @@ FRONT_API_KEY = os.environ.get("FRONT_API_KEY", "")
 
 # Topes contra acaparar cupo y entradas gratis (por evento).
 MAX_PENDING_ORDERS_PER_EMAIL = int(os.environ.get("MAX_PENDING_ORDERS_PER_EMAIL", "2"))
-MAX_PENDING_ORDERS_PER_IP = int(os.environ.get("MAX_PENDING_ORDERS_PER_IP", "5"))
+MAX_PENDING_ORDERS_PER_IP = int(os.environ.get("MAX_PENDING_ORDERS_PER_IP", "20"))
 MAX_FREE_TICKETS_PER_EMAIL = int(os.environ.get("MAX_FREE_TICKETS_PER_EMAIL", "4"))
-MAX_FREE_TICKETS_PER_IP = int(os.environ.get("MAX_FREE_TICKETS_PER_IP", "8"))
+MAX_FREE_TICKETS_PER_IP = int(os.environ.get("MAX_FREE_TICKETS_PER_IP", "30"))
 # Freno de payment/sync/: segundos entre consultas a la pasarela y antigüedad máxima de un pedido vencido.
 PAYMENT_SYNC_MIN_SECONDS = int(os.environ.get("PAYMENT_SYNC_MIN_SECONDS", "15"))
 PAYMENT_SYNC_MAX_AGE_HOURS = int(os.environ.get("PAYMENT_SYNC_MAX_AGE_HOURS", "24"))
