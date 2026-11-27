@@ -1,6 +1,7 @@
 """Cobro directo: toda la venta entra a una cuenta cargada a mano, sin marketplace_fee."""
 
 import hashlib
+import time
 import hmac
 import io
 import json
@@ -120,6 +121,7 @@ class TokenTests(MpTestCase):
 
 
 SECRET = "secreto-del-webhook"
+TS = str(int(time.time()))
 
 
 @override_settings(MP_WEBHOOK_SECRET=SECRET)
@@ -134,12 +136,12 @@ class DeauthorizedTests(KeyedCase):
                 venue=venue, provider=PROVIDER, status=VenueIntegration.Status.CONNECTED, account_id="777",
             )
         order_id = "ORDTST01"
-        manifest = f"id:{order_id.lower()};request-id:req-1;ts:1700000000;"
+        manifest = f"id:{order_id.lower()};request-id:req-1;ts:{TS};"
         digest = hmac.new(SECRET.encode(), manifest.encode(), hashlib.sha256).hexdigest()
         body = {"action": "application.deauthorized", "type": "mp-connect", "data": {"id": order_id}, "user_id": 777}
         response = self.client.post(
             f"/api/v1/mercadopago/webhook/?data.id={order_id}&type=mp-connect", data=json.dumps(body),
-            content_type="application/json", HTTP_X_SIGNATURE=f"ts=1700000000,v1={digest}", HTTP_X_REQUEST_ID="req-1",
+            content_type="application/json", HTTP_X_SIGNATURE=f"ts={TS},v1={digest}", HTTP_X_REQUEST_ID="req-1",
         )
         self.assertEqual(response.status_code, 200)
         direct.refresh_from_db()

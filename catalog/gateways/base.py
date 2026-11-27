@@ -14,11 +14,18 @@ from django.db import transaction
 
 from .. import crypto
 from ..models import GatewayAccount, GatewayCharge, Order, Payment
-from ..payment_confirm import approved_outcome
+from ..payment_confirm import approved_outcome, void_reversed
 
 CENT = Decimal("0.01")
 Outcome = Payment.Outcome
 logger = logging.getLogger(__name__)
+
+
+# Estados de la pasarela que revierten un cobro ya emitido: {(proveedor, estado): VoidReason}.
+# TODO: vacío a propósito. Ni Macro (EstadoId, solo se conoce el 3 = realizada) ni Nave (solo se conoce
+# SUCCESS_PROCESSED) tienen estados de devolución o contracargo documentados en este repo. Completar
+# con la documentación técnica de cada banco; settle() ya anula las entradas cuando aparezca uno.
+REVERSAL_STATES = {}
 
 
 class GatewayError(Exception):
@@ -74,5 +81,8 @@ def settle(charge_id, *, status, approved, amount, currency="ARS"):
                 charge.outcome = Outcome.NOT_APPROVED
             else:
                 charge.outcome = approved_outcome(order, amount, currency)
+        reason = REVERSAL_STATES.get((charge.provider, charge.status))
+        if charge.outcome == Outcome.ISSUED and reason is not None:
+            void_reversed(order, reason, f"cobro {charge.provider} {charge.pk}")
         charge.save()
         return charge

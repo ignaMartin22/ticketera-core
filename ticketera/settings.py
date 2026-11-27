@@ -155,6 +155,12 @@ TICKETS_REPLY_TO = os.environ.get("DJANGO_TICKETS_REPLY_TO", "")
 # Clave secreta de la aplicación para validar la firma del webhook de pagos.
 # Sin ella el webhook responde 503 mp_not_configured.
 MP_WEBHOOK_SECRET = os.environ.get("MP_WEBHOOK_SECRET", "")
+MP_WEBHOOK_MAX_AGE_SECONDS = 300  # tolerancia del `ts` de x-signature (pasado y futuro)
+
+# Clave propia para firmar los QR. Vacía: se firman con SECRET_KEY (como hasta ahora). Con clave, la
+# verificación sigue aceptando la firma legada salvo TICKET_QR_ACCEPT_LEGACY=0 (anula lo ya emitido).
+TICKET_QR_KEY = os.environ.get("TICKET_QR_KEY", "")
+TICKET_QR_ACCEPT_LEGACY = os.environ.get("TICKET_QR_ACCEPT_LEGACY", "1") != "0"
 
 # Pasarelas sin reparto (ver docs/specs/pasarelas.md). Las credenciales son de cada boliche y se
 # cargan desde el panel; acá solo van las direcciones de cada entorno, por si el banco las cambia.

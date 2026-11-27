@@ -119,9 +119,11 @@ type OrderTicket = {
   ticketTypeName: string;
   qr: string;                                   // texto exacto que va dentro del QR
   usedAt: string | null;                        // cuándo se quemó en puerta
+  voidedAt: string | null;                      // si no es null, la entrada está anulada (devolución, contracargo o a mano) y no sirve para entrar
 };
 ```
 
+- Una entrada con `voidedAt` no es nula: mostrala como "Anulada" y no muestres el QR como válido. Anular no cambia `status` ni libera cupo.
 - Quien tiene el `id` del pedido ve sus entradas. No lo pongas en logs ni en analíticas.
 - Cuando el pedido queda pagado, el core le manda al comprador un mail con sus entradas (un QR por entrada) y el link a esta página. El checkout puede avisarlo: "Te mandamos las entradas por mail".
 - La respuesta no trae nombre, email ni teléfono del comprador.
@@ -181,13 +183,14 @@ Respuestas del escaneo:
 | --- | --- | --- | --- |
 | 200 | `admitted` | `ticket: { id, ticketType, holderName, usedAt }` | Ingreso válido. Queda quemada. |
 | 409 | `already_used` | `ticket` con `usedAt` y `usedBy` del primer escaneo | Ya ingresó. |
+| 409 | `void` | `ticket: { id, ticketType, holderName, voidedAt }` | Entrada anulada (devolución, contracargo o a mano). No se quema y nunca responde `admitted` ni `already_used`, haya ingresado antes o no. Mostrá "Entrada anulada: no dejar pasar". |
 | 409 | `list_closed` | `ticket: { id, ticketType, holderName, validUntil }` | Entrada de lista fuera de hora. No se quema (sección 8). |
 | 409 | `wrong_event` | `event: { slug, title, startsAt }` | Es de otra fecha del boliche. No se quema. |
 | 404 | `invalid` | | QR falso, alterado o de otro boliche. |
 
 El escaneo solo funciona con conexión. Ante un error de red no asumas que la entrada entró: se puede reintentar sin riesgo, porque el segundo intento responde `already_used` si el primero llegó.
 
-Asistencia:
+Asistencia (las entradas anuladas no cuentan en `issued` ni aparecen en `tickets`):
 
 ```ts
 type Attendance = {

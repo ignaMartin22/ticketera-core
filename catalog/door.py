@@ -69,6 +69,19 @@ def ticket_data(ticket):
     }
 
 
+def void_response(ticket):
+    """Entrada anulada (devolución, contracargo o a mano): no entra y no se quema."""
+    return JsonResponse({
+        "result": "void",
+        "ticket": {
+            "id": str(ticket.pk),
+            "ticketType": ticket.ticket_type.name,
+            "holderName": ticket.order.buyer_name,
+            "voidedAt": ticket.voided_at.isoformat(),
+        },
+    }, status=409)
+
+
 @csrf_exempt
 @require_POST
 @never_cache
@@ -95,6 +108,9 @@ def scan(request, venue, user, event_slug):
     if ticket.event_id != event.pk:
         return JsonResponse({"result": "wrong_event", "event": event_summary(ticket.event)}, status=409)
 
+    if ticket.voided_at is not None:
+        return void_response(ticket)
+
     now = timezone.now()
     # La hora límite se evalúa con el mismo `now` con el que se quema: no hay ventana entre el chequeo y el UPDATE.
     guest_list = getattr(ticket.ticket_type, "guest_list", None)
@@ -108,11 +124,16 @@ def scan(request, venue, user, event_slug):
                 "validUntil": guest_list.valid_until.isoformat(),
             },
         }, status=409)
-    burned = Ticket.objects.filter(pk=ticket.pk, used_at__isnull=True).update(used_at=now, used_by=user)
+    # `voided_at IS NULL` en el mismo UPDATE: no hay ventana entre anular y quemar.
+    burned = Ticket.objects.filter(pk=ticket.pk, used_at__isnull=True, voided_at__isnull=True).update(
+        used_at=now, used_by=user,
+    )
     if burned:
         ticket.used_at = now
         return JsonResponse({"result": "admitted", "ticket": ticket_data(ticket)})
     ticket = Ticket.objects.select_related("ticket_type", "order", "used_by").get(pk=ticket.pk)
+    if ticket.voided_at is not None:  # se anuló entre el chequeo y el quemado
+        return void_response(ticket)
     return JsonResponse(
         {"result": "already_used", "ticket": {**ticket_data(ticket), "usedBy": ticket.used_by.get_username() if ticket.used_by else None}},
         status=409,
@@ -126,7 +147,7 @@ def attendance(request, venue, user, event_slug):
     event = Event.objects.filter(venue=venue, slug=event_slug, is_published=True).first()
     if event is None:
         return error("not_found", 404)
-    tickets = Ticket.objects.filter(event=event)
+    tickets = Ticket.objects.filter(event=event, voided_at__isnull=True)  # las anuladas no cuentan ni se listan
     admitted_count = Count("pk", filter=Q(used_at__isnull=False))
     totals = tickets.aggregate(issued=Count("pk"), admitted=admitted_count)
     types = (

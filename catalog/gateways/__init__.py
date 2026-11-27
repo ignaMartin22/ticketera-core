@@ -70,12 +70,12 @@ def start(order, provider):
     order.save(update_fields=["platform_fee"])
     if provider == macro.PROVIDER:
         # La referencia la elegimos nosotros; el link es una página del core que arma el formulario.
-        charge = existing or GatewayCharge.objects.create(order=order, provider=provider, reference=order.pk.hex)
-        charge.checkout_url = f"{settings.PUBLIC_API_URL}/api/v1/pagos/macro/{order.pk}/"
+        charge = existing or GatewayCharge.objects.create(order=order, provider=provider, reference=order.payment_ref)
+        charge.checkout_url = f"{settings.PUBLIC_API_URL}/api/v1/pagos/macro/{order.payment_ref}/"
         charge.save(update_fields=["checkout_url", "updated_at"])
         return charge.checkout_url
     secret = secrets.token_hex(32)
-    notify_url = f"{settings.PUBLIC_API_URL}/api/v1/pagos/nave/{order.pk}/aviso/?secret={secret}"
+    notify_url = f"{settings.PUBLIC_API_URL}/api/v1/pagos/nave/{order.payment_ref}/aviso/?secret={secret}"
     seconds_left = (order.expires_at - timezone.now()).total_seconds()
     reference, checkout_url = nave.create(account, order, items, total, return_url(order), notify_url, seconds_left)
     GatewayCharge.objects.create(

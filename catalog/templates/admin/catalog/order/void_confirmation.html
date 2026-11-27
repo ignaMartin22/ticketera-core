@@ -1,0 +1,17 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<p>Vas a anular <strong>{{ ticket_count }}</strong> entrada(s) de {{ orders|length }} pedido(s) pagado(s).
+Las anuladas dejan de servir en la puerta y no se pueden reactivar desde acá. El cupo vendido no se libera.</p>
+{% if used_count %}<p><strong>{{ used_count }}</strong> de esas entradas ya ingresaron: se anulan igual y queda el registro.</p>{% endif %}
+<ul>
+  {% for order in orders %}<li>{{ order.event }} · {{ order.buyer_name }} · {{ order.buyer_email }}</li>{% endfor %}
+</ul>
+<form method="post">
+  {% csrf_token %}
+  {% for order in orders %}<input type="hidden" name="{{ action_checkbox_name }}" value="{{ order.pk }}">{% endfor %}
+  <input type="hidden" name="action" value="void_order_tickets">
+  <input type="hidden" name="post" value="yes">
+  <input type="submit" value="Sí, anular">
+  <a href="{% url 'admin:catalog_order_changelist' %}" class="button cancel-link">No, volver</a>
+</form>
+{% endblock %}

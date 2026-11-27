@@ -91,7 +91,7 @@ def order_body(order, items, fee, total, direct=False):
         "processing_mode": "manual",
         "capture_mode": "automatic",
         "total_amount": _money(total),
-        "external_reference": str(order.pk),
+        "external_reference": order.payment_ref,
         "expiration_time": expiration_time(order),
         "payer": {"email": order.buyer_email},
         "items": [

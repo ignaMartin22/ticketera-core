@@ -38,7 +38,7 @@ Ninguna de las dos pasarelas separa la comisión en el mismo pago, como hace `ma
 
 El botón de Macro no es una API que devuelve una URL: el navegador tiene que mandarle un formulario con los datos cifrados.
 
-- La referencia del cobro (`TransaccionComercioId`) es el id del pedido sin guiones.
+- La referencia del cobro (`TransaccionComercioId`) es `Order.payment_ref`, no el id del pedido (el id es la llave para ver las entradas y el boliche ve la referencia en su panel). Los cobros iniciados antes guardaron el id sin guiones y se siguen reconociendo.
 - El link es una página del core, `GET /api/v1/pagos/macro/<pedido>/`, que arma el formulario y lo envía sola al botón del entorno que corresponda (`MACRO_CLICK_URL` o `MACRO_CLICK_TEST_URL`).
 - **Debe:** el monto, la sucursal y las URL de vuelta van cifrados con AES-256-CBC usando la frase del comercio, con un vector inicial al azar delante y en base64. La clave es la frase repetida o cortada a 32 bytes. El monto va en centavos, sin separadores: $11.000 es `1100000`.
 - **Debe:** la firma (`Hash`) es el SHA-256 en hexadecimal de `IP*comercio*sucursal*monto*frase`, con la IP de quien abre la página. Detrás del proxy (`DJANGO_BEHIND_PROXY=1`), es la primera de `X-Forwarded-For`.
@@ -48,7 +48,7 @@ El botón de Macro no es una API que devuelve una URL: el navegador tiene que ma
 
 - Se pide un token OAuth entre servidores (`NAVE_AUTH_URL` o `NAVE_AUTH_TEST_URL`) con el client ID y el client secret. Se guarda en la caché hasta un minuto antes de vencer.
 - Se crea la intención de pago (`POST /payment_request/ecommerce`) con:
-  - el id del pedido como `external_payment_id`;
+  - `Order.payment_ref` como `external_payment_id`;
   - el POS ID;
   - el total y las entradas, con el cargo de servicio incluido;
   - el email, el nombre y el teléfono del comprador;
@@ -82,7 +82,7 @@ Las mismas reglas que con Mercado Pago (ver `payment_confirm`):
 
 - La URL de aviso es `/api/v1/pagos/nave/<pedido>/aviso/?secret=<secreto>`, con un secreto al azar por cobro (`GatewayCharge.notify_secret`).
 - **Debe:** sin el secreto correcto, responde `401`.
-- **Debe:** se consulta la intención de pago (`GET /payment_requests/<id>`). Está aprobada si su estado es `SUCCESS_PROCESSED`, su `external_payment_id` es el pedido y la moneda es ARS.
+- **Debe:** se consulta la intención de pago (`GET /payment_requests/<id>`). Está aprobada si su estado es `SUCCESS_PROCESSED`, su `external_payment_id` es la `payment_ref` del pedido (o su id, en cobros anteriores) y la moneda es ARS.
 
 ### Sin aviso
 

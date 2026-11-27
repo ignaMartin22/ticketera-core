@@ -34,6 +34,24 @@ def buyer_ip(request):
         return ""
 
 
+def proxied_client_ip(request):
+    """IP del cliente de una vista que usa el navegador directo (admin, panel), detrás del proxy.
+
+    Con `DJANGO_BEHIND_PROXY` (settings.SECURE_PROXY_SSL_HEADER) vale el ÚLTIMO valor de
+    X-Forwarded-For: es el que agrega Caddy; los de la izquierda los puede inventar el cliente.
+    Sin proxy, REMOTE_ADDR. Si el valor no es una IP válida devuelve cadena vacía.
+    """
+    value = request.META.get("REMOTE_ADDR", "")
+    if getattr(settings, "SECURE_PROXY_SSL_HEADER", None):
+        forwarded = request.headers.get("x-forwarded-for", "")
+        if forwarded.strip():
+            value = forwarded.split(",")[-1]
+    try:
+        return str(ipaddress.ip_address(value.strip()))
+    except ValueError:
+        return ""
+
+
 def clean_person_name(value, max_length):
     """Nombre normalizado (espacios colapsados) o `ValidationError("invalid_name")`.
 

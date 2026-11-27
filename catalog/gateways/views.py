@@ -12,7 +12,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST, require_safe
 
 from ..models import GatewayAccount, GatewayCharge, Order
-from ..payment_confirm import order_total
+from ..payment_confirm import order_ref_filter, order_total
 from . import macro, nave, return_url, sync_charge
 
 MAX_BODY = 64 * 1024
@@ -29,9 +29,9 @@ def client_ip(request):
 
 @require_safe
 @never_cache
-def macro_pay_page(request, order_id):
+def macro_pay_page(request, order_ref):
     """Arma el formulario cifrado con la IP de quien abre la página y lo envía solo al botón de Macro."""
-    order = get_object_or_404(Order.objects.select_related("event__venue"), pk=order_id)
+    order = get_object_or_404(Order.objects.select_related("event__venue"), order_ref_filter(order_ref))
     charge = get_object_or_404(GatewayCharge, order=order, provider=macro.PROVIDER)
     if order.paid_at is not None or order.expires_at <= timezone.now():
         return HttpResponseRedirect(return_url(order))
@@ -81,10 +81,10 @@ def macro_notify(request):
 @csrf_exempt
 @require_POST
 @never_cache
-def nave_notify(request, order_id):
+def nave_notify(request, order_ref):
     """Aviso de Nave. La URL lleva el secreto del cobro; igual se consulta la intención de pago."""
     charge = GatewayCharge.objects.select_related("order__event").filter(
-        order_id=order_id, provider=nave.PROVIDER,
+        order_ref_filter(order_ref, prefix="order__"), provider=nave.PROVIDER,
     ).first()
     secret = request.GET.get("secret", "")
     if charge is None or not charge.notify_secret or not hmac.compare_digest(charge.notify_secret, secret):

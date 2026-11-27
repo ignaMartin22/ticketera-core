@@ -28,6 +28,6 @@ urlpatterns = [
         name="order-payment-sync",
     ),
     path("pagos/macro/aviso/", gateway_views.macro_notify, name="macro-notify"),
-    path("pagos/macro/<uuid:order_id>/", gateway_views.macro_pay_page, name="macro-pay"),
-    path("pagos/nave/<uuid:order_id>/aviso/", gateway_views.nave_notify, name="nave-notify"),
+    path("pagos/macro/<str:order_ref>/", gateway_views.macro_pay_page, name="macro-pay"),
+    path("pagos/nave/<str:order_ref>/aviso/", gateway_views.nave_notify, name="nave-notify"),
 ]

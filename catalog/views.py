@@ -121,6 +121,7 @@ def order_data(order, items):
                 "ticketTypeName": ticket.ticket_type.name,
                 "qr": sign_ticket(ticket.pk),
                 "usedAt": ticket.used_at.isoformat() if ticket.used_at else None,
+                "voidedAt": ticket.voided_at.isoformat() if ticket.voided_at else None,
                 "validUntil": valid_until_iso(ticket),
             }
             for ticket in order.tickets.select_related("ticket_type__guest_list")

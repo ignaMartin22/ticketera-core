@@ -1,3 +1,4 @@
+import secrets
 from uuid import uuid4
 
 from django.conf import settings
@@ -235,8 +236,17 @@ class GuestList(models.Model):
         return f"{self.event} / {self.name}"
 
 
+def new_payment_ref():
+    """Referencia de pago: 128 bits al azar en hexadecimal (alfanumérica, apta para cualquier pasarela)."""
+    return secrets.token_hex(16)
+
+
 class Order(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
+    payment_ref = models.CharField(
+        max_length=64, unique=True, default=new_payment_ref, editable=False,
+        help_text="Referencia que se manda a las pasarelas. Distinta del id: el id es la llave para ver las entradas.",
+    )
     event = models.ForeignKey(Event, on_delete=models.PROTECT, related_name="orders")
     buyer_email = models.EmailField()
     buyer_name = models.CharField(max_length=150, blank=True)
@@ -286,6 +296,12 @@ class OrderItem(models.Model):
         ]
 
 
+class VoidReason(models.TextChoices):
+    REFUND = "refund", "Devolución"
+    CHARGEBACK = "chargeback", "Contracargo"
+    MANUAL = "manual", "Anulada a mano"
+
+
 class Ticket(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
     order = models.ForeignKey(Order, on_delete=models.PROTECT, related_name="tickets")
@@ -296,6 +312,11 @@ class Ticket(models.Model):
     used_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="+",
     )
+    voided_at = models.DateTimeField(null=True, blank=True, help_text="Anulada: ya no sirve para entrar.")
+    voided_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="+",
+    )
+    void_reason = models.CharField(max_length=10, choices=VoidReason, blank=True)
 
     class Meta:
         ordering = ["created_at", "pk"]
@@ -327,10 +348,15 @@ class Payment(models.Model):
 
 
 class DoorLoginFailure(models.Model):
-    """Intento fallido de login de portería, para limitar los reintentos por usuario."""
+    """Intento fallido de login (portería o paneles web), para limitar los reintentos."""
+
+    class Scope(models.TextChoices):
+        DOOR = "door", "Portería y API"
+        ADMIN = "admin", "Admin y plataforma"
 
     username = models.CharField(max_length=150, db_index=True)
     ip = models.GenericIPAddressField(null=True, blank=True, db_index=True)
+    scope = models.CharField(max_length=10, choices=Scope, default=Scope.DOOR)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
 
