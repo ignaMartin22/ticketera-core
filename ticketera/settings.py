@@ -118,13 +118,16 @@ MP_APP_ID = os.environ.get("MP_APP_ID", "")
 MP_CLIENT_SECRET = os.environ.get("MP_CLIENT_SECRET", "")
 MP_REDIRECT_URI = os.environ.get("MP_REDIRECT_URI", "")
 MP_TOKEN_ENCRYPTION_KEY = os.environ.get("MP_TOKEN_ENCRYPTION_KEY", "")
-MP_CONNECT_RETURN_URL = os.environ.get("MP_CONNECT_RETURN_URL", "/")
 MP_TEST_TOKENS = os.environ.get("MP_TEST_TOKENS") == "1"
 # Por defecto una cuenta de cobro en modo prueba (live_mode=False) no se ofrece, no cobra y no emite
 # entradas. Solo para entornos de prueba: en producción va apagado.
 PAYMENTS_ALLOW_TEST_MODE = os.environ.get("PAYMENTS_ALLOW_TEST_MODE") == "1"
 PUBLIC_API_URL = os.environ.get("PUBLIC_API_URL", "").rstrip("/")
 FRONT_BASE_URL = os.environ.get("FRONT_BASE_URL", "").rstrip("/")
+# A dónde vuelve el admin del boliche después de conectar Mercado Pago desde el panel: la sección Cobros.
+MP_CONNECT_RETURN_URL = os.environ.get("MP_CONNECT_RETURN_URL") or (
+    f"{FRONT_BASE_URL}/admin/cobros" if FRONT_BASE_URL else "/"
+)
 # Mail de entradas al comprador. Sin DJANGO_EMAIL_HOST, en desarrollo los mails se imprimen en la
 # consola; en el servidor no salen y quedan pendientes para `manage.py send_ticket_emails`.
 EMAIL_HOST = os.environ.get("DJANGO_EMAIL_HOST", "")

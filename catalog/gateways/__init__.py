@@ -15,6 +15,21 @@ from . import macro, nave
 from .base import GatewayError, settle
 
 ADAPTERS = {macro.PROVIDER: macro, nave.PROVIDER: nave}
+
+# Las credenciales de cada pasarela, tal como las entrega el banco: (campo, etiqueta, secreto, obligatorio).
+# Las usan el panel de la plataforma y la API de gestión del boliche.
+CREDENTIAL_FIELDS = {
+    macro.PROVIDER: [
+        ("comercio", "ID de comercio", False, True),
+        ("secret", "Clave secreta (frase)", True, True),
+        ("sucursal", "ID de sucursal", False, False),
+    ],
+    nave.PROVIDER: [
+        ("client_id", "Client ID", False, True),
+        ("client_secret", "Client secret", True, True),
+        ("pos_id", "POS ID", False, True),
+    ],
+}
 MERCADOPAGO = "mercadopago"
 
 

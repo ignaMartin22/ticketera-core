@@ -234,6 +234,40 @@ Códigos de `reason`: `denied` (el dueño canceló), `invalid_state` (el link ve
 
 Los tokens se renuevan solos. Mostrá "Reconectar" solo cuando `needsReconnect` es `true`.
 
+### Todas las cuentas de cobro: `/api/v1/manage/venues/<boliche>/payment-accounts/`
+
+Para la sección Cobros del panel. Solo el rol `admin` del boliche (token de `/auth/login/`; sin token `401`, sin permiso `404`).
+
+- `GET` devuelve el estado de Mercado Pago, Macro y Nave:
+
+```ts
+type PaymentAccounts = {
+  mercadopago: {
+    available: boolean;       // el back tiene la app de Mercado Pago configurada
+    connected: boolean;
+    needsReconnect: boolean;
+    direct: boolean;          // cobro directo (cargado por la plataforma), no OAuth
+    liveMode: boolean | null;
+    connectedAt: string | null;
+  };
+  macro: Gateway;
+  nave: Gateway;
+};
+type Gateway = {
+  available: boolean;         // false: el back no puede guardar credenciales (falta PUBLIC_API_URL o la clave)
+  connected: boolean;
+  liveMode: boolean | null;   // false = entorno de prueba del banco
+  accountId: string;          // ID de comercio (Macro) o POS ID (Nave); no es secreto
+  connectedAt: string | null;
+  fields: { name: string; label: string; secret: boolean; required: boolean }[];
+};
+```
+
+- `PUT .../payment-accounts/<macro|nave>/` guarda o reemplaza las credenciales. Cuerpo: los `name` de `fields` más `liveMode` (booleano, por defecto `false`). Responde el mismo estado que el `GET`. Errores: `400 missing_credentials`, `400 invalid_credentials`, `503 gateway_not_configured`.
+- `DELETE .../payment-accounts/<macro|nave>/` las quita (`204`).
+
+Las claves secretas nunca vuelven en una respuesta. Mercado Pago se conecta con las rutas de arriba (`connect` y `DELETE .../mercadopago/`). Si `MP_CONNECT_RETURN_URL` está vacía, la vuelta es `<FRONT_BASE_URL>/admin/cobros`.
+
 ## 6. Mercado Pago: pago del pedido
 
 El front no usa ningún SDK ni credencial de Mercado Pago. No hay public key en el navegador: el backend arma el pago con la cuenta del boliche y devuelve una URL. El front solo redirige.
