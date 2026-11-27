@@ -24,7 +24,7 @@ def pay(client, order, provider, venue="a"):
     return client.post(url(order, venue=venue), data=json.dumps({"provider": provider}), content_type="application/json")
 
 
-@override_settings(FRONT_BASE_URL=FRONT, PUBLIC_API_URL=API)
+@override_settings(FRONT_BASE_URL=FRONT, PUBLIC_API_URL=API, PAYMENTS_ALLOW_TEST_MODE=True)
 class GatewayCase(TestCase):
     def setUp(self):
         config = override_settings(MP_TOKEN_ENCRYPTION_KEY=Fernet.generate_key().decode())

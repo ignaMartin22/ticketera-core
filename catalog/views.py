@@ -3,6 +3,7 @@ import re
 from uuid import UUID
 
 from django.core.exceptions import RequestDataTooBig, ValidationError
+from django.conf import settings
 from django.core.validators import validate_email, validate_slug
 from django.db.models import Prefetch
 from django.http import JsonResponse
@@ -12,6 +13,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST, require_safe
 
+from .client import buyer_ip, clean_person_name, front_trusted
 from .covers import cover_url
 from .models import Event, Order, Payment, TicketType, Venue
 from .orders import MAX_TICKETS_PER_ORDER, OrderConflict, reserve_order
@@ -166,10 +168,7 @@ def order_input(request):
         validate_email(email)
     except ValidationError as exc:
         raise ValidationError("invalid_email") from exc
-    name = data.get("name")
-    if not isinstance(name, str) or not 1 <= len(" ".join(name.split())) <= 150:
-        raise ValidationError("invalid_name")
-    name = " ".join(name.split())
+    name = clean_person_name(data.get("name"), 150)
     # Opcional: hoy las entradas no se envían por WhatsApp, así que el front ya no lo pide.
     # Si viene, tiene que ser un número E.164 válido.
     phone = data.get("phone")
@@ -200,11 +199,13 @@ def order_input(request):
 @require_POST
 @never_cache
 def order_create(request, venue_slug, event_slug):
+    if settings.FRONT_API_KEY and not front_trusted(request):
+        return JsonResponse({"error": "forbidden"}, status=403)
     if request.content_type != "application/json":
         return JsonResponse({"error": "expected_json"}, status=415)
     try:
         buyer, quantities, key = order_input(request)
-        order, items, created = reserve_order(venue_slug, event_slug, buyer, quantities, key)
+        order, items, created = reserve_order(venue_slug, event_slug, buyer, quantities, key, buyer_ip(request))
     except RequestDataTooBig:
         return JsonResponse({"error": "request_too_large"}, status=413)
     except ValidationError as exc:
@@ -213,7 +214,7 @@ def order_create(request, venue_slug, event_slug):
     except Event.DoesNotExist:
         return JsonResponse({"error": "event_unavailable"}, status=404)
     except OrderConflict as exc:
-        return JsonResponse({"error": str(exc)}, status=409)
+        return JsonResponse({"error": str(exc)}, status=429 if str(exc) == "too_many_reservations" else 409)
     return JsonResponse({"order": order_data(order, items)}, status=201 if created else 200)
 
 

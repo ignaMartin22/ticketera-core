@@ -2,6 +2,7 @@ from datetime import timedelta
 from uuid import uuid4
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -138,6 +139,7 @@ class OrderAdminTests(TestCase):
         self.order_b = make_order(self.event_b, [(self.type_b, 1)])
         self.user = get_user_model().objects.create_user(username="a-admin", is_staff=True)
         Membership.objects.create(venue=self.event_a.venue, user=self.user, role=Membership.Role.ADMIN)
+        self.user.user_permissions.add(Permission.objects.get(codename="change_order"))
         self.client.force_login(self.user)
 
     def test_changelist_scoped_to_managed_venue(self):
@@ -157,3 +159,17 @@ class OrderAdminTests(TestCase):
         self.assertIsNotNone(self.order_a.paid_at)
         self.assertEqual(self.order_a.tickets.count(), 2)
         self.assertIsNone(self.order_b.paid_at)
+
+    def test_mark_paid_action_requires_change_permission(self):
+        self.user.user_permissions.clear()
+        self.client.force_login(get_user_model().objects.get(pk=self.user.pk))  # permisos sin caché
+        response = self.client.post(
+            reverse("admin:catalog_order_changelist"),
+            {"action": "mark_paid_and_issue", "_selected_action": [str(self.order_a.pk)]},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.order_a.refresh_from_db()
+        self.assertIsNone(self.order_a.paid_at)
+        self.assertEqual(self.order_a.tickets.count(), 0)
+        # Ver el listado sigue andando.
+        self.assertEqual(self.client.get(reverse("admin:catalog_order_changelist")).status_code, 200)

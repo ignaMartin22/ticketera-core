@@ -79,6 +79,13 @@ git check-ignore deploy/.env   # imprime deploy/.env (si hay .git): está ignora
 
 **Guardá una copia de `deploy/.env` fuera de la VPS** (si se pierde `MP_TOKEN_ENCRYPTION_KEY`, los tokens guardados quedan inservibles). Nunca lo commitees.
 
+### Variables de seguridad
+
+- `PAYMENTS_ALLOW_TEST_MODE` (por defecto `0`): con `0`, una cuenta de cobro en modo prueba no se ofrece, no cobra y un pago aprobado de ella no emite entradas. Ponerlo en `1` solo en pruebas. `MP_TEST_TOKENS` también va en `0` en producción.
+- `FRONT_API_KEY` (por defecto vacía): clave que el front manda en `X-Front-Key`. Vacía = el alta de pedidos no la exige. Configurarla en el front y en el core a la vez.
+- `MAX_PENDING_ORDERS_PER_EMAIL` (2), `MAX_PENDING_ORDERS_PER_IP` (20), `MAX_FREE_TICKETS_PER_EMAIL` (4), `MAX_FREE_TICKETS_PER_IP` (30), `PAYMENT_SYNC_MIN_SECONDS` (15), `PAYMENT_SYNC_MAX_AGE_HOURS` (24), `MAX_GUESTS_PER_PROMOTER_PER_HOUR` (200).
+- Los tokens de personal anteriores a este cambio quedan inválidos: el personal vuelve a entrar.
+
 ## 4. Levantar
 
 ```bash

@@ -103,8 +103,8 @@ class OrderTests(TestCase):
         )
         self.assertEqual(response.status_code, 201)
         self.assertEqual(Order.objects.get(pk=response.json()["order"]["id"]).buyer_phone, "")
-        for empty in ("", None):
-            response = create_order(self.client, uuid4(), quantity=1, phone=empty)
+        for n, empty in enumerate(("", None)):
+            response = create_order(self.client, uuid4(), quantity=1, phone=empty, email=f"otro{n}@example.com")
             self.assertEqual(response.status_code, 201)
             self.assertEqual(Order.objects.get(pk=response.json()["order"]["id"]).buyer_phone, "")
         # Si viene, se sigue validando.

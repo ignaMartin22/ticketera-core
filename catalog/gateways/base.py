@@ -6,8 +6,10 @@ sola vez y lo que no se puede emitir queda "a revisar" para que el boliche lo re
 """
 
 import json
+import logging
 from decimal import Decimal, InvalidOperation
 
+from django.conf import settings
 from django.db import transaction
 
 from .. import crypto
@@ -16,6 +18,7 @@ from ..payment_confirm import approved_outcome
 
 CENT = Decimal("0.01")
 Outcome = Payment.Outcome
+logger = logging.getLogger(__name__)
 
 
 class GatewayError(Exception):
@@ -56,6 +59,13 @@ def settle(charge_id, *, status, approved, amount, currency="ARS"):
     with transaction.atomic():
         charge = GatewayCharge.objects.select_for_update().get(pk=charge_id)
         order = Order.objects.select_for_update(of=("self",)).get(pk=charge.order_id)
+        if approved and not settings.PAYMENTS_ALLOW_TEST_MODE:
+            account = GatewayAccount.objects.filter(
+                venue_id=order.event.venue_id, provider=charge.provider,
+            ).first()
+            if account is None or not account.live_mode:
+                logger.warning("Cobro aprobado de una cuenta no productiva: no emite (cobro %s).", charge.pk)
+                approved = False
         charge.status = str(status or "")[:40]
         if amount is not None:
             charge.amount = amount

@@ -41,7 +41,7 @@ class KeyedCase(TestCase):
         self.addCleanup(config.disable)
 
 
-@override_settings(FRONT_BASE_URL=FRONT, PUBLIC_API_URL="https://api.example.com")
+@override_settings(FRONT_BASE_URL=FRONT, PUBLIC_API_URL="https://api.example.com", PAYMENTS_ALLOW_TEST_MODE=True)
 class PaymentBodyTests(KeyedCase):
     def setUp(self):
         super().setUp()
@@ -152,6 +152,7 @@ class DeauthorizedTests(KeyedCase):
         self.assertEqual(VenueIntegration.objects.get(venue=venue_b, provider=PROVIDER).status, "expired")
 
 
+@override_settings(PAYMENTS_ALLOW_TEST_MODE=True)
 class SetOwnAccountTests(KeyedCase):
     def setUp(self):
         super().setUp()

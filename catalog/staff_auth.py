@@ -1,6 +1,7 @@
 """Autenticación del personal de los boliches: token firmado, login y permisos por boliche."""
 
 import hashlib
+import hmac
 import json
 from datetime import timedelta
 from functools import wraps
@@ -14,12 +15,14 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST, require_safe
 
+from .client import buyer_ip
 from .models import ApiToken, DoorLoginFailure, Membership, Venue
 
 TOKEN_SALT = "catalog.door-token"
 TOKEN_MAX_AGE = 12 * 60 * 60
 MAX_BODY_BYTES = 8192
 LOGIN_MAX_FAILURES = 10
+LOGIN_MAX_FAILURES_PER_IP = 30
 LOGIN_FAILURE_WINDOW = timedelta(minutes=15)
 LOGIN_FAILURE_RETENTION = timedelta(hours=24)
 
@@ -46,8 +49,13 @@ def json_body(request):
     return data, None
 
 
+def password_stamp(user):
+    """Huella corta de la contraseña: cambiarla invalida los tokens firmados antes."""
+    return user.get_session_auth_hash()[:32]
+
+
 def issue_token(user):
-    return signing.dumps({"uid": user.pk}, salt=TOKEN_SALT)
+    return signing.dumps({"uid": user.pk, "h": password_stamp(user)}, salt=TOKEN_SALT)
 
 
 def user_from_request(request):
@@ -57,8 +65,11 @@ def user_from_request(request):
         return None
     try:
         payload = signing.loads(token, salt=TOKEN_SALT, max_age=TOKEN_MAX_AGE)
-        uid = payload["uid"]
-        return get_user_model().objects.filter(pk=uid, is_active=True).first()
+        uid, stamp = payload["uid"], payload["h"]
+        user = get_user_model().objects.filter(pk=uid, is_active=True).first()
+        if user is None or not isinstance(stamp, str):
+            return None
+        return user if hmac.compare_digest(stamp.encode(), password_stamp(user).encode()) else None
     except (signing.BadSignature, KeyError, TypeError, ValueError):
         return None
 
@@ -90,21 +101,39 @@ def bearer_user(request):
     return api_token_user(request) or user_from_request(request)
 
 
-def login_retry_after(key):
-    """Segundos de espera si el usuario agotó sus intentos; 0 si puede intentar."""
-    now = timezone.now()
-    recent = list(
-        DoorLoginFailure.objects.filter(username=key, created_at__gt=now - LOGIN_FAILURE_WINDOW)
-        .order_by("-created_at").values_list("created_at", flat=True)[:LOGIN_MAX_FAILURES]
-    )
-    if len(recent) < LOGIN_MAX_FAILURES:
+def _wait(created_ats, limit, now):
+    """Segundos de espera si hay `limit` fallos recientes (ordenados del más nuevo al más viejo)."""
+    if len(created_ats) < limit:
         return 0
-    wait = recent[-1] + LOGIN_FAILURE_WINDOW - now
+    wait = created_ats[limit - 1] + LOGIN_FAILURE_WINDOW - now
     return max(1, int(wait.total_seconds()) + 1)
 
 
-def record_login_failure(key):
-    DoorLoginFailure.objects.create(username=key)
+def _recent(filters, limit, now):
+    return list(
+        DoorLoginFailure.objects.filter(created_at__gt=now - LOGIN_FAILURE_WINDOW, **filters)
+        .order_by("-created_at").values_list("created_at", flat=True)[:limit]
+    )
+
+
+def login_retry_after(key, ip=""):
+    """Segundos de espera si se agotaron los intentos; 0 si puede intentar.
+
+    Sin IP confiable, el límite es por usuario (10 fallos en 15 minutos). Con IP, es por
+    (usuario, IP) con el mismo umbral, más un tope por IP de 30 fallos con cualquier usuario:
+    los fallos de otras IPs no bloquean al usuario.
+    """
+    now = timezone.now()
+    if not ip:
+        return _wait(_recent({"username": key}, LOGIN_MAX_FAILURES, now), LOGIN_MAX_FAILURES, now)
+    return max(
+        _wait(_recent({"username": key, "ip": ip}, LOGIN_MAX_FAILURES, now), LOGIN_MAX_FAILURES, now),
+        _wait(_recent({"ip": ip}, LOGIN_MAX_FAILURES_PER_IP, now), LOGIN_MAX_FAILURES_PER_IP, now),
+    )
+
+
+def record_login_failure(key, ip=""):
+    DoorLoginFailure.objects.create(username=key, ip=ip or None)
     DoorLoginFailure.objects.filter(created_at__lt=timezone.now() - LOGIN_FAILURE_RETENTION).delete()
 
 
@@ -112,17 +141,18 @@ def login_user(request):
     """Parte común de los logins: devuelve (usuario, respuesta_de_error).
 
     Valida el cuerpo, aplica el límite de intentos y las credenciales. Si el
-    login es correcto borra los fallos del usuario.
+    login es correcto borra los fallos del usuario (en esa IP, si hay IP confiable).
     """
     data, failure = json_body(request)
     if failure:
         return None, failure
     username, password = data.get("username"), data.get("password")
+    ip = buyer_ip(request)
     user = None
     key = None
     if isinstance(username, str) and isinstance(password, str):
         key = username.strip().lower()[:150]
-        retry_after = login_retry_after(key)
+        retry_after = login_retry_after(key, ip)
         if retry_after:
             response = JsonResponse({"error": "too_many_attempts", "retryAfter": retry_after}, status=429)
             response["Retry-After"] = str(retry_after)
@@ -130,9 +160,10 @@ def login_user(request):
         user = authenticate(request, username=username, password=password)
     if user is None or not user.is_active:
         if key is not None:
-            record_login_failure(key)
+            record_login_failure(key, ip)
         return None, error("invalid_credentials", 401)
-    DoorLoginFailure.objects.filter(username=key).delete()
+    cleared = DoorLoginFailure.objects.filter(username=key)
+    (cleared.filter(ip=ip) if ip else cleared).delete()
     return user, None
 
 
