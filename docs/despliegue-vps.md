@@ -1,5 +1,7 @@
 # Despliegue de pruebas en la VPS
 
+Para llevar este despliegue a otro servidor sin perder entradas vendidas ni cuentas de cobro, ver [mudanza.md](mudanza.md).
+
 Backend de TicketJuy (Django + PostgreSQL) en Docker, en `/opt/ticketjuy`, publicado solo en `127.0.0.1:8001`. Caddy (el del sistema) hace de proxy HTTPS desde `https://api.66-97-35-67.sslip.io`.
 
 Todos los comandos se corren como un usuario con permiso para Docker (o con `sudo`), salvo que se indique otra cosa.
